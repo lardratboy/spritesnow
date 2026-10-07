@@ -99,6 +99,80 @@ M4 follows block-showroom's lead ("centres → instances → GPU"): the GPU is g
 - **Overlays stay on a 2D canvas.** Selection and lock outlines are drawn on a 2D canvas layered over the GL canvas, as in `sheet-view.js` today.
 - **Goldens are unaffected.** They hash grids, not pixels, so no golden changes are expected in M4.
 
+### 5.2 Tiered sprites (M5)
+
+From [from3Dto2D.md](from3Dto2D.md) P5, borrowing block-showroom's `tierFolder` and tier fields (G9, G10). A tiered sprite is a sprite made of sprites: a 16×16 sprite read as 4×4 blocks of 4×4 cells, with its own symmetry at each level.
+
+**Tiers.** A tier list gives the radices from outer to inner, and their product is the sprite's size: 16 = 4·4, 32 = 4·8, 16 = 2·2·4. A cell's x and y each become a list of mixed-radix digits, one digit per tier, as in the showroom's `decomposeDigits`. A tier may have different radices across and down (`4x2`), so rectangles work too.
+
+**Two ways a group can act on a tier.** The showroom has only the second.
+
+- **Block symmetry**: the group acts on each block of the tier *together with everything inside it*, so a block's contents turn or mirror with it. The whole sprite is the outermost block, so today's `symmetry` setting is already the outer tier's block symmetry. Nothing about it changes.
+- **Copy symmetry**: the group rearranges a tier's blocks but *slides* their contents into place without turning or mirroring them. This is the showroom's `tierFolder`, which folds each tier's digits on their own. It makes repeats, not symmetry: `copy:rot90` puts copies of one block in a four-fold pattern, but the sprite is not four-fold symmetric.
+
+The sprite's group is everything these generate together. That can be larger than the groups as written. A rot90 sprite turns a block's left/right mirror into a top/bottom mirror too, so the blocks end up with both mirrors. The UI shows each tier's resulting group, just as it shows the effective group on a rectangle today. The rectangle rule carries over: a tier's group is G ∩ Aut(that tier's block). Swaps (diagonal mirrors, quarter turns) need a square block.
+
+**Measured** with a scratchpad prototype on 2026-10-07. "Orbits" is the number of free cells, each one an independent choice:
+
+| 16×16 sprite | Orbits | aut | Notes |
+|---|---|---|---|
+| `symmetry: dihedral`, no tiers | 36 | 8 | today |
+| `dihedral`, tiers `4 / 4`, no tier groups | 36 | 8 | same orbits as no tiers, so the same sprite |
+| `none`, `4 copy:dihedral / 4 copy:dihedral` (the showroom's mode) | 9 | 1 | only 9 free cells, so very repetitive |
+| `none`, `4 / 4 dihedral` | 48 | 1 | 16 blocks, each D4-symmetric |
+| `rot90`, `4 / 4 mirror-x` | 16 | 4 | blocks end up with both mirrors |
+| `mirror-x`, `4 / 4 rot90` | 32 | 2 | |
+| `none`, `4 copy:rot90 / 4` | 64 | 1 | four-fold repeats, no symmetry |
+
+The prototype also checked, on every square size from 4 to 36 with every split into 2 or 3 tiers and random groups (plus two rectangles):
+- every generator leaves the sprite unchanged (4,101 checks)
+- `aut ≥` the order of the sprite group's effective part
+- the outer block symmetry alone gives exactly the orbits of today's engine (50 of 50 cases)
+
+A size has a handful of splits (16 has 8: 16, 2·8, 8·2, 4·4, 2·2·4, 2·4·2, 4·2·2, 2·2·2·2), and a prime size has only itself.
+
+**Generation.** Tiers change only the orbit table. `src/core/tiers.js` builds each generator as a permutation of the w×h cells, joins orbits with union-find, and returns a table of the same shape as `orbitTable()`. `generate.js` then copies seed cells exactly as it does now. Two rules keep old sprites safe:
+
+- **The seed rectangle stays the ordinary one** for `gen.symmetry` (fold 2), so the RNG is consumed in the same order. A tiered orbit is a union of ordinary orbits, and each of those already has its representative in that rectangle. The tiered representative is the one that comes first in row-major order. So a tier list that adds no groups gives the same sprite, byte for byte, as no tiers at all.
+- **No tiers means the current code path.** `gen.tiers` defaults to off, every golden stays as it is, and `fold: 1` recipes cannot have tiers.
+
+Masks and fields are evaluated at the representative and copied, so symmetry holds by construction whatever the formula. A round mask therefore looks tiered too.
+
+**Tier fields.** These are the showroom's six fields, re-derived for 2D.
+- **They are not added to `FIELDS`.** `mix` and `vary` pick from `FIELDS` by index, so changing its length changes old sprites. A tier field is a separate setting, `gen.tierField` (default `none`).
+- **It changes what the base field sees.** It alters the base field's input coordinates (u, v) or its parameters p, using the cell's digits. The base field is still chosen as today, `mix` and `vary` included, and acts as the motif. Values stay integers, so the `mod M` pipeline is unchanged.
+- **Its constants come from `hash32(seed)`, not the sprite's RNG stream.** Turning a tier field on then leaves the colours and parameters unchanged, and the before and after can be compared.
+
+The six:
+- `wreath`: each block shows the motif under a D4 element chosen from that block's address and the seed, cascading inward through the tiers as in the showroom. This is D4 ≀ G, and it gives Truchet-like sprites.
+- `digit-swap`: the digits' significance is reversed before the base field is evaluated. With two tiers, a coordinate r₀·a + b reads as r₁·b + a.
+- `prefix-hash`: a hash of the chain of block addresses varies p (offsets and coefficients), so each block holds a variant of the motif.
+- `phasecell`: each block gets a phase offset, so its bands shift.
+- `cross`: integer dot and cross products of the centred digit vectors of adjacent tiers are added to the base value.
+- `carry`: the mixed-radix odometer term from the showroom, in integers.
+
+Each field defines what it does with a single tier, which is where the showroom had a bug (its `wreath` fell through to another mode).
+
+**Recipe.** `gen.tiers` is a string, so the existing schema, timeline labels and permalinks handle it unchanged: `''` (off), or tiers from outer to inner separated by ` / `. Each tier is a radix (`4` or `4x2`), then optionally a block group and a `copy:` group. The outer tier has no block group, because that is `gen.symmetry`. For example:
+- `'4 / 4 mirror-x'`: 4×4 blocks, each mirrored left/right
+- `'4 copy:rot90 / 4'`: 4×4 blocks, arranged in a four-fold pattern of copies
+
+The parser and printer live in `src/recipe/tiers.js`. The core takes the parsed list.
+
+When `w` or `h` changes and the tiers no longer multiply out to the sprite's size, the tiers stay in the recipe but switch off, and the UI says why (for example, "tiers off: 4·4 = 16, sprite is 16×12"). Changing the size back turns them on again. Nothing is dropped or substituted silently.
+
+**Tests.**
+- All 1,568 goldens unchanged.
+- Each fixture, under each split into tiers with no groups and no tier field, is byte-identical to the same fixture without tiers.
+- The prototype's checks become `tiers.test.js`:
+  - every generator preserves the sprite
+  - `aut ≥ |effective sprite group|`
+  - the outer block symmetry alone reproduces today's orbits
+- **Tiered goldens.** Tiered sprites have no oracle, so a new `test/golden-tiers.json` pins the port's output from M5a onward. A separate `npm run golden:tiers` writes it. `npm run golden` keeps writing only the reference goldens. The same rule applies to both: regenerate only for an intended change, and say so in the commit.
+- The permalink and session files round-trip with tiers set.
+
+**Not in M5.** The showroom's per-tier `gap` would draw blocks apart (an exploded view). In 2D it would be raster-only, so goldens would not care, but it changes pixel sizes and atlas slots, so it waits. M5c's block-grid overlay shows the structure without it. Also left for later: colouring each copy by its orbit element (P4), and choosing tier groups per cell the way `vary` chooses fields.
+
 ## 6. Milestones
 
 | | Milestone | Done when |
@@ -108,7 +182,8 @@ M4 follows block-showroom's lead ("centres → instances → GPU"): the GPU is g
 | **M2** ✅ | **Minimal app (v1)** | A browser user can generate a sheet, pick from all 10 symmetries, see the effective group and aut, copy a recipe or permalink, export PNG, and load an old v4 session. *Done 2026-10-06: recipe schema, permalink, old-session import (locked cells included, checked against the reference) and an integer-scale rasteriser, all Node-tested. Browser checklist in `test/smoke.md`* |
 | **M3** ✅ | **Workshop** | Timeline (NG's take/keyframe version), collection, lock and reroll are ported. Three steps: **M3a ✅ timeline**, **M3b ✅ lock and reroll**, **M3c ✅ collection and session save/load**. *M3a done 2026-10-06: the take is a pure module (`src/workshop/timeline.js`) holding whole recipes: append-only with branch pointers, REC, ◆ keyframes, keys-only filter, slider-drag coalescing, a 400-entry cap that spares keyframes, and the pruner. NG's T1–T6 timeline self-tests are Node tests. Two deliberate changes from NG: the pruner's 8×8 average hash is computed from the rasterised sheet, not a browser-smoothed thumbnail, so it is exact and testable; and a new entry is labelled against the entry it branched from. An old v4 session now loads as its whole timeline (bookmarks become keyframes), appended after the current entries rather than replacing them, since sessions cannot be saved until M3* *M3b done 2026-10-06: a lock is a per-cell override (`src/workshop/cells.js`), the same thing imported old locks already were; a locked cell keeps its settings and palette while the sheet changes, checked cell for cell against the old app's lockCfg. Reroll gives one cell a new seed and unlocks it; Regenerate skips locked cells. ⌘/Ctrl-click locks, Shift-click rerolls, L and Shift+R act on the selection; each action is a timeline entry. As in the old app, a locked sprite larger than the sheet's cells overlaps its neighbours* *M3c done 2026-10-06: the collection is a pure module (`src/workshop/collection.js`) outside the timeline, as in the old apps. A kept item stores one cell's seed, settings and palette seed (a locked cell's own), so it re-renders exactly. Keep (K, Alt-click, + Keep), rename, drag or Alt+↑/↓ to reorder, restore (a timeline entry), copy, PNG, and a packed-sheet export. Sessions are saved as `spritesnow-session/1` (`src/workshop/session.js`): the timeline with branches, keyframes, REC state and any unrecorded sheet, plus the collection, with seed arrays pooled. The same loader reads old v4 sessions and now brings in their collections, checked sprite for sprite against the reference. Two deliberate changes: loading any session now replaces the timeline and collection (after asking, when there is work to lose), where M3a appended old timelines; and restore keeps the sheet's size, where the old app also restored the columns, rows, spacing and scale the sprite was kept under* |
 | **M4** ✅ | **Rendering** (§5.1) | Two steps. **M4a ✅ scale-1 sheet and sprite cache** (branch `m4a/…`): the screen sheet is rasterised at scale 1 and the view's zoom is multiplied by `scale`, with smoothing already off, so the on-screen image no longer grows with `scale²`. Sheet export (`export-sheet` in `main.js`) rasterises at `scale` on demand instead of reusing the screen image. A per-cell sprite cache keyed on (seed, gen, palette seed) means reroll, lock and selection regenerate only the cells that changed. Before switching, check whether the pruner's `averageHash` input (currently the image at scale) gives the same hashes at scale 1. If it does not, either keep hashing a scale-independent image or record the change as deliberate; never change pruning silently. Done when the 50×50 / 32 px / scale 16 sheet renders in the browser (it cannot today), `npm test` is green with no golden changes, and the status-bar time for a one-cell reroll is close to the time for one sprite. *M4a done 2026-10-07: `src/workshop/sheet.js` builds the screen sheet at scale 1 from an LRU sprite cache (8,192 sprites, keyed on seed, settings and palette seed). When the layout is unchanged and every sprite fits its cell, only the cells whose sprite changed are redrawn, and only those boxes are copied to the canvas. The view multiplies its zoom by `scale`, and outlines and clicks use that effective zoom. Sheet, collection and sprite exports rasterise at `scale` on demand; a sheet past a browser canvas limit (32,767 px a side, 16,384² px in all) is refused before allocation, with the largest scale that fits. Measured in headless Chrome: 50×50 / 32 px / scale 16 builds in 220 ms on a 1700² image, and a one-cell reroll reports "1 generated, built in 1.5 ms" (one sprite alone: 0.13 ms; before M4a, every reroll rebuilt the whole sheet). Exports equal the pre-M4a sheet byte for byte (Node tests). **Deliberate change to pruning:** the pruner's hash at scale 1 differs from the hash at the sheet's scale in 433 of 720 sampled sheets (mean 2 bits of 64, worst 19), because the 8×8 block boundaries fall differently. The pruner now hashes the scale-1 sheet, so an entry's hash no longer depends on its scale, much as NG's fixed-size thumbnail hash did. Hashes are never saved in session files (they are recomputed on load), so no file changes* **M4b ✅ WebGL2 sheet view** (branch `m4b/…`): `src/ui/sheet-view.js` draws with the index atlas, palette texture and one instanced quad per sprite (§5.1). The overlay canvas keeps selection and lock outlines. Falls back to the M4a 2D path when WebGL2 is unavailable. Done when the GL view and the 2D path show the same pixels at integer zoom (a browser check in `test/smoke.md`, and a headless pixel test if it is cheap, like block-showroom's `render-modes.test.js`), pan and zoom do not re-rasterise, and `npm test` is green with no golden changes. Generation in workers (block-showroom's `jobs.js`) only if generation is still the bottleneck after M4a. *M4b done 2026-10-07: `src/raster/atlas.js` (pure) packs the R8 index atlas (one slot per cell, all the size of the largest sprite), one palette row per cell, and 8 ints per instance. A changed sprite that fits its slot is rewritten in place and only its slot and palette row are re-uploaded. `src/ui/gl-sheet.js` draws one instanced quad per sprite; the fragment shader finds the sheet pixel as a 2D canvas does, floor((pixel centre − offset) / zoom), with the view origin split into a whole sheet pixel and a remainder so the float maths stays small far into a big sheet. `sheet-view.js` puts the GL canvas under the 2D outline canvas, and falls back to the M4a path without WebGL2, on a lost context, for a sheet too big for the GPU's textures, or with `?gl=0`. The status line names the renderer. Verified: Node tests run the shader's rule on the CPU (`drawAtlas`) and match `rasterizeSheet` byte for byte after packs and in-place updates; `npm run test:browser` (headless Chrome, SwiftShader, harness copied from block-showroom) shows WebGL2 and 2D screenshots identical at three whole-number views of two recipes (one with an overlapping locked sprite), and after a one-cell reroll, and fails on a one-pixel shader shift. Pan and zoom rebuild and upload nothing. Outlines are compared hidden: over the GL layer their antialiased edges blend one colour level differently. Canvases are now sized in whole device pixels with a matching CSS size, so a fractional stage no longer resamples them. 50×50 / 32 px / scale 16 builds in about 220 ms either way. Workers not needed: a one-cell reroll is a few ms* |
-| M5+ | Choose from the backlog | Readouts and orientation sheets (from3Dto2D P2–P3), the seam kernel (a natural fit for the M4b shader), tiered sprites, 3D, tiling |
+| M5 | **Tiered sprites** (§5.2) | Three steps. **M5a tier engine** (branch `m5a/…`): `src/core/tiers.js` builds the tiered orbit table (block and copy groups, union-find, representatives from the ordinary seed rectangle), `generate.js` uses it when `gen.tiers` is set, `src/recipe/tiers.js` parses and prints `gen.tiers`, and the controls gain a Tiers picker that offers only the splits of the current size, with a block group and a copy group per tier. Each tier's resulting group and the orbit count are shown, as is the reason when tiers are off. Done when `tiers.test.js` passes, all 1,568 goldens are unchanged, every fixture with group-free tiers is byte-identical to the same fixture without tiers, `test/golden-tiers.json` exists, and the §5.2 table's examples can be opened in the browser from permalinks listed in `test/smoke.md`. **M5b tier fields** (branch `m5b/…`): `gen.tierField` with the six fields of §5.2, each defined for a single tier, with constants from `hash32(seed)`. `golden-tiers.json` gains tier-field fixtures (an intended change, said in the commit). Done when turning a tier field on leaves a sprite's colours and parameters unchanged and tiered symmetry still holds with every tier field. **M5c tier view and readouts** (branch `m5c/…`): a block-grid toggle on the M4b overlay canvas, per-tier groups and orbit counts in the inspector, and a smoke checklist. Done when the overlay lines up with block edges at every whole-number zoom, in both the GL and 2D views |
+| M6+ | Choose from the backlog | Readouts and orientation sheets (from3Dto2D P2–P3), the seam kernel (a natural fit for the M4b shader), tier gaps, 3D, tiling |
 
 ## 7. Starter zip contents
 
