@@ -9,7 +9,9 @@
    (workshop/session.js) saves both.
    The screen shows the sheet at scale 1 and the view zooms by the scale;
    sprites come from a cache, and only changed cells are redrawn
-   (workshop/sheet.js). Exports rasterise at the scale on demand. */
+   (workshop/sheet.js). Exports rasterise at the scale on demand.
+   The view draws the sprites with WebGL2 (ui/gl-sheet.js), or the scale-1
+   canvas when it cannot; ?gl=0 in the URL forces the canvas. */
 import { normalize, cellSettings, resizeSheet, soloRecipe } from './recipe/schema.js';
 import { encode, decode } from './recipe/permalink.js';
 import { aut } from './core/groups2d.js';
@@ -45,22 +47,20 @@ let items = [];               // the collection
 const sheetCanvas = document.createElement('canvas');
 const cache = createSpriteCache();
 let sheet = null;             // the live build: sprites and the sheet image at scale 1
-let built = { ms: 0, generated: 0 };
+let built = { ms: 0, generated: 0, count: 0 };
 
 function render(){
   const t0 = performance.now();
   sheet = buildSheet(recipe, cache, sheet);
   if (sheet.dirty) updateCanvas(sheet.image, sheetCanvas, sheet.dirty);
   else imageToCanvas(sheet.image, sheetCanvas);
-  const { cols, rows, spacing, scale } = recipe.sheet, { w, h } = recipe.gen;
-  view.setImage(sheetCanvas, { cols, rows, outerW: w + spacing, outerH: h + spacing,
-                               offX: 0, offY: 0, spriteW: w, spriteH: h }, scale);
+  view.setSheet(sheet, sheetCanvas, recipe.sheet.scale);
   if (selected >= sheet.sprites.length) selected = -1;
   view.setLocked(Object.keys(recipe.overrides).map(Number));
   view.setSelection(selected);
   controls.update(recipe);
   showInspector();
-  built = { ms: performance.now() - t0, generated: sheet.generated };
+  built = { ms: performance.now() - t0, generated: sheet.generated, count: built.count + 1 };
   setStatus();
   writeHash();
 }
@@ -81,7 +81,7 @@ function setStatus(){
   const { cols, rows } = recipe.sheet, { w, h } = recipe.gen, { ms, generated } = built;
   const status = $('status');
   status.textContent = `${cols * rows} sprites · ${w}×${h} · scale ${recipe.sheet.scale} · ` +
-    `${generated} generated, built in ${ms < 10 ? ms.toFixed(1) : ms.toFixed(0)} ms`;
+    `${generated} generated, built in ${ms < 10 ? ms.toFixed(1) : ms.toFixed(0)} ms · ${view.renderer}`;
   if (note){
     const span = document.createElement('span');
     span.className = note.cls || '';
@@ -322,7 +322,10 @@ const controls = mountControls($('controls'), {
   onAction: name => ACTIONS[name](),
   onLoad: loadFile,
 });
-const view = mountSheetView($('stage'), { onSelect: select });
+const view = mountSheetView($('stage'), { onSelect: select, gl: new URLSearchParams(location.search).get('gl') !== '0' });
+/* For the browser tests (test/browser/) and the console: builds counts
+   render() calls, so a test can tell that pan and zoom rebuilt nothing. */
+window.spritesnow = { view, stats: () => ({ builds: built.count, ...view.stats() }) };
 const inspector = mountInspector($('inspector'), {
   onCopyRecipe(){ copyText(JSON.stringify(soloRecipe(cellSettings(recipe, selected), recipe.sheet), null, 2), 'Recipe'); },
   onExport(){

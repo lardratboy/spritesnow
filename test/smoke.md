@@ -1,4 +1,4 @@
-# Browser smoke test (M2, M3a, M3b, M3c, M4a)
+# Browser smoke test (M2, M3a, M3b, M3c, M4a, M4b)
 
 What to check by hand after a change to the UI. About five minutes.
 
@@ -140,3 +140,20 @@ come from a cache, so only changed cells are generated.
 34. **Export limits.** On that sheet, "↓ Sheet PNG" gives a red message:
     27200×27200 px is too big for a browser, and scale 9 fits. Back on
     the default sheet (scale 4) it downloads a 576×432 PNG, as before.
+
+## WebGL2 view (M4b)
+
+The sprites are drawn by the GPU from their palette indices; the 2D path
+is the fallback. `npm run test:browser` checks most of this headlessly.
+
+35. **Renderer.** The status line ends "· WebGL2". Open
+    <http://localhost:8000/?gl=0>: it ends "· 2D" (the fallback).
+36. **Same pixels.** On the default sheet click "Copy link" and paste it in
+    a second tab, adding `?gl=0` before the `#` (so it starts
+    `http://localhost:8000/?gl=0#r=`). Press **F** in both and flip
+    between the tabs: no sprite moves or changes colour.
+37. **Outlines.** Lock a sprite and select another: the red and blue
+    outlines sit exactly around their cells at any zoom, as in step 33.
+38. **Big sheet.** Repeat step 33 in the WebGL2 tab. Panning and zooming
+    stay smooth, the status line does not change while you do (nothing is
+    rebuilt), and a Shift-click still says "1 generated".

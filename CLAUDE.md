@@ -9,6 +9,9 @@ first. Background is in `docs/spritesnow.md` and `docs/from3Dto2D.md`.
   (ES modules, so file:// will not work).
 - `npm test`: Node unit tests (`test/*.test.js`). Golden hashes in
   `test/golden.json` are the behavioural contract.
+- `npm run test:browser`: headless Chrome tests (`test/browser/`) that
+  compare what the WebGL2 and 2D views draw. Skipped without Chrome
+  (`SPRITESNOW_CHROME=/path` to point at one).
 - `npm run golden`: regenerates `test/golden.json` from the **reference**
   app. Only run it when a change to sprite output is *intended*, and say so
   in the commit message.
