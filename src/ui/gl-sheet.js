@@ -9,22 +9,30 @@
    so at a whole-number zoom the two show the same pixels. The view's origin
    is split into a whole sheet pixel (u_origin, an int) and a remainder of
    under one sheet pixel (u_offset), so the float maths stays small even when
-   zoomed far into a big sheet. */
+   zoomed far into a big sheet.
+
+   Animation (M6b): each cell holds a slot per frame, and the u_frame
+   uniform is the time. The vertex shader picks each sprite's slot for it
+   (raster/atlas.js), so playing a frame uploads nothing. */
 import { packAtlas, updateAtlas, slotOf, STRIDE } from '../raster/atlas.js';
 
 const VS = `#version 300 es
 layout(location = 0) in ivec4 a_box;     // sprite box in sheet px: x, y, w, h
-layout(location = 1) in ivec4 a_src;     // slot origin, palette row origin
+layout(location = 1) in ivec4 a_src;     // first frame's slot, palette row origin (x, y), unused
+layout(location = 2) in ivec4 a_time;    // frames in the loop T, stride, unused
 uniform vec2 u_canvas, u_offset;
-uniform ivec2 u_origin;
+uniform ivec2 u_origin, u_slot;          // u_slot: one slot's size
 uniform float u_zoom;
+uniform int u_frame, u_perRow;
 flat out ivec4 v_box, v_src;
 void main(){
+  int k = a_src.x + (u_frame % max(a_time.x, 1)) / max(a_time.y, 1);
+  v_src = ivec4(ivec2(k % u_perRow, k / u_perRow) * u_slot, a_src.yz);
   vec2 c = vec2(gl_VertexID & 1, gl_VertexID >> 1);
   // one device px larger on every side; the fragment shader decides coverage
   vec2 p = u_offset + (vec2(a_box.xy - u_origin) + c * vec2(a_box.zw)) * u_zoom + (c * 2.0 - 1.0);
   gl_Position = vec4(p.x / u_canvas.x * 2.0 - 1.0, 1.0 - p.y / u_canvas.y * 2.0, 0.0, 1.0);
-  v_box = a_box; v_src = a_src;
+  v_box = a_box;
 }`;
 
 const FS = `#version 300 es
@@ -73,13 +81,14 @@ export function createGLSheet(canvas){
   }
   const U = name => gl.getUniformLocation(prog, name);
   const u = { canvas: U('u_canvas'), offset: U('u_offset'), origin: U('u_origin'), zoom: U('u_zoom'),
-              sheet: U('u_sheet'), pw: U('u_pw'), atlas: U('u_atlas'), palette: U('u_palette') };
+              sheet: U('u_sheet'), pw: U('u_pw'), atlas: U('u_atlas'), palette: U('u_palette'),
+              frame: U('u_frame'), perRow: U('u_perRow'), slot: U('u_slot') };
   const maxSize = gl.getParameter(gl.MAX_TEXTURE_SIZE);
 
   const vao = gl.createVertexArray(), buf = gl.createBuffer();
   gl.bindVertexArray(vao);
   gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-  for (const loc of [0, 1]){
+  for (const loc of [0, 1, 2]){
     gl.enableVertexAttribArray(loc);
     gl.vertexAttribIPointer(loc, 4, gl.INT, STRIDE * 4, loc * 16);
     gl.vertexAttribDivisor(loc, 1);
@@ -98,7 +107,7 @@ export function createGLSheet(canvas){
   gl.uniform1i(u.atlas, 0); gl.uniform1i(u.palette, 1);
   gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
 
-  let atlas = null;
+  let atlas = null, frame = 0;
   /* full: whole textures uploaded; cells: sprites re-uploaded alone; draws */
   const stats = { full: 0, cells: 0, draws: 0 };
 
@@ -121,8 +130,11 @@ export function createGLSheet(canvas){
   }
   function uploadCells(cells){
     for (const i of cells){
-      const { ax, ay, px, py } = slotOf(atlas, i);
-      subUpload(0, atlas.width, ax, ay, atlas.slotW, atlas.slotH, gl.RED_INTEGER, atlas.index);
+      for (let j = 0; j < atlas.frames; j++){
+        const { ax, ay } = slotOf(atlas, i, j);
+        subUpload(0, atlas.width, ax, ay, atlas.slotW, atlas.slotH, gl.RED_INTEGER, atlas.index);
+      }
+      const { px, py } = slotOf(atlas, i);
       subUpload(1, atlas.palW, px, py, atlas.pw, 1, gl.RGBA, atlas.palette);
     }
     for (const p of [gl.UNPACK_ROW_LENGTH, gl.UNPACK_SKIP_PIXELS, gl.UNPACK_SKIP_ROWS]) gl.pixelStorei(p, 0);
@@ -148,6 +160,8 @@ export function createGLSheet(canvas){
       return true;
     },
     resize(w, h){ canvas.width = w; canvas.height = h; },
+    /** The time drawn next (a whole number of frames, from 0). */
+    setFrame(t){ frame = Math.max(0, t | 0); },
     /** @param {{x:number, y:number, zoom:number}} v  device px: the sheet's
      *  top left on the canvas, and device px per sheet px */
     draw(v){
@@ -163,6 +177,9 @@ export function createGLSheet(canvas){
       gl.uniform1f(u.zoom, v.zoom);
       gl.uniform2i(u.sheet, atlas.sheetW, atlas.sheetH);
       gl.uniform1i(u.pw, atlas.pw);
+      gl.uniform1i(u.frame, frame);
+      gl.uniform1i(u.perRow, atlas.perRow);
+      gl.uniform2i(u.slot, atlas.slotW, atlas.slotH);
       gl.bindVertexArray(vao);
       gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, atlas.count);
       gl.bindVertexArray(null);

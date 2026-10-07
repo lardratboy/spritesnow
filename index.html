@@ -22,6 +22,11 @@
       <button id="fit" title="Fit the sheet (F)">Fit</button>
       <button id="blocks" title="Show where tier blocks meet (G)" aria-pressed="false">Blocks</button>
     </div>
+    <div id="playbar" class="hidden" aria-label="Animation">
+      <button id="play" type="button" aria-pressed="false">▶</button>
+      <input id="scrub" type="range" min="0" max="0" step="1" value="0" aria-label="Frame">
+      <span id="frame-no"></span>
+    </div>
     <section id="timeline" aria-label="Timeline"></section>
     <div id="status" role="status"></div>
   </main>

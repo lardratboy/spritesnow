@@ -84,44 +84,63 @@ export function generateSprite(seed, gen, palette){
 /**
  * An animation (newdesign.md §5.3): gen.frames frames, related by gen.motion,
  * with time entering the field through gen.drive.
- * @param {{ count?:number }} opts  build only frames 0 .. count−1 (they never
- *   depend on later frames, except through the outline when tiers are on,
- *   in which case every frame is built and the rest dropped)
- * @returns generateSprite's sprite, with grid = frame 0, plus
- *   { frames:Uint8Array[][], T:number, motion:string, drive:string, fit:number|null }
+ * @param {{ count?:number, times?:number[] }} opts  which frames to build:
+ *   count  frames 0 .. count−1
+ *   times  these frame numbers, increasing (M6b: a sheet over the atlas cap
+ *          shows every k-th frame). Each is the same frame a full build
+ *          gives. Only the seed rectangles the listed frames copy from are
+ *          drawn, except that noise draws every frame up to the last one
+ *          needed, in order, since the RNG is consumed in that order.
+ *   Frames never depend on later frames, except through the outline when
+ *   tiers are on: then every frame is built and the rest dropped.
+ * @returns generateSprite's sprite, with grid = frames[0] (frame 0 unless times leaves it out), plus
+ *   { frames:Uint8Array[][], times:number[], T:number, motion:string, drive:string, fit:number|null }
+ *   frames  the frames built; frames[j] is frame times[j]
  *   T       the animation's frame count (1 when not animated; see animState)
  *   motion  the canonical motion text when it is on, else ''
  *   drive   'phase' | 'spin' | 'drift' when it acts (not for noise), else ''
  *   fit     with a motion on and every frame built: the fraction of cells the
  *           motion overrides, against the same drive with no motion; else null
  */
-export function generateFrames(seed, gen, palette, { count } = {}){
+export function generateFrames(seed, gen, palette, { count, times } = {}){
   const anim = animState(gen);
   if (!anim.on){
     const still = generateSprite(seed, gen, palette);
-    return { ...still, frames: [still.grid], T: 1, motion: '', drive: '', fit: null };
+    return { ...still, frames: [still.grid], times: [0], T: 1, motion: '', drive: '', fit: null };
   }
   const T = anim.T, s = setup(seed, gen, palette), { w, h, sw, sh } = s;
   const ms = motionState(gen);
   const st = cachedSpaceTimeTable(gen.symmetry, w, h, s.tiered.on ? s.tiered.tiers : null, T, ms.on ? ms.motion : []);
-  const want = count === undefined ? T : Math.max(1, Math.min(T, count | 0));
-  const n = s.outlined && s.tiered.on ? T : want;
+  const want = times ? times.filter((t, j) => Number.isInteger(t) && t >= 0 && t < T && !(j && t <= times[j - 1]))
+             : Array.from({ length: count === undefined ? T : Math.max(1, Math.min(T, count | 0)) }, (_, t) => t);
+  if (!want.length) want.push(0);
+  const all = s.outlined && s.tiered.on || want.length === T;
+  const list = all ? Array.from({ length: T }, (_, t) => t) : want;
   const driven = gen.source !== 'noise';
   const drive = driven ? makeDrive(gen.drive, gen.driveAmount, w, h, T, s.p) : null;
 
-  const seeds = [];
-  for (let t = 0; t < n; t++) seeds.push(seedFrame(s, t && drive ? drive(t) : null));
+  // seed rectangles on demand; noise draws them strictly in frame order
+  const seeds = new Array(T);
+  let drawn = 0;
+  const seedOf = t => {
+    if (!seeds[t]){
+      if (driven) seeds[t] = seedFrame(s, t && drive ? drive(t) : null);
+      else while (drawn <= t){ seeds[drawn] = seedFrame(s, null); drawn++; }
+    }
+    return seeds[t];
+  };
   const S = sw * sh, F = w * h;
-  const read = r => { const t = (r / S) | 0, k = r - t*S; return seeds[t][(k / sw) | 0][k % sw]; };
+  const read = r => { const t = (r / S) | 0, k = r - t*S; return seedOf(t)[(k / sw) | 0][k % sw]; };
+  if (!driven) seedOf(list[list.length - 1]);     // a full build's noise draws, whatever the motion
   let frames = [];
-  for (let t = 0; t < n; t++){
+  for (const t of list){
     const grid = Array.from({length:h},()=>new Uint8Array(w));
     for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) grid[y][x] = read(st.rep[t*F + y*w + x]);
     frames.push(grid);
   }
   // fit: the cells where the motion's copy differs from each frame's own seeds
   let fit = null;
-  if (ms.on && n === T){
+  if (ms.on && list.length === T){
     let differ = 0;
     for (let t = 0; t < T; t++) for (let c = 0; c < F; c++)
       if (frames[t][(c / w) | 0][c % w] !== read(t*S + st.base.rep[c])) differ++;
@@ -129,16 +148,16 @@ export function generateFrames(seed, gen, palette, { count } = {}){
   }
   // The outline is drawn per frame. Motion elements keep neighbours; tiers
   // do not, so with tiers on an empty cell is outlined when any cell of its
-  // space-time orbit is.
-  if (s.outlined) frames = outlineFrames(frames, s, s.tiered.on ? (t, c) => st.rep[t*F + c] : null, T * S);
-  frames = frames.slice(0, want);
+  // space-time orbit is (and every frame was built).
+  if (s.outlined) frames = outlineFrames(frames, s, s.tiered.on ? (j, c) => st.rep[list[j]*F + c] : null, T * S);
+  if (all && want.length < T) frames = want.map(t => frames[t]);
 
   const motion = ms.on ? printMotion(ms.motion) : '';
   const tail = ` · frames ${T}` + (motion ? ` · motion ${motion}` : '') +
                (driven ? ` · drive ${gen.drive} ${gen.driveAmount}` : '');
   return { grid: frames[0], colors: s.paint, w, h, symmetry: gen.symmetry, effectiveSymmetry: s.table.effective.id,
            fold: gen.fold, tiers: s.tierText, tierField: s.tf ? s.tf.id : '', recipeText: s.recipeText + tail,
-           frames, T, motion, drive: driven ? gen.drive : '', fit };
+           frames, times: want, T, motion, drive: driven ? gen.drive : '', fit };
 }
 
 /* ------------------------------------------------------------- the pieces */

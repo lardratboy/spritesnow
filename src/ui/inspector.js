@@ -10,25 +10,31 @@
    Animated (M6a): the frames as a strip under the preview (free frames,
    the ones that hold new cells, outlined), each frame's group, the free
    frames and cells, and the fit: how much of the drive the motion
-   overrides. The preview and the rows above them describe frame 0. */
+   overrides. The rows describe frame 0.
+   Playback (M6b): the preview shows the player's current frame, which the
+   strip marks; clicking a frame in the strip shows it (and pauses).
+   ↓ Strip saves every frame side by side, ↓ APNG the animation. */
 import { groupById, orbitTable } from '../core/groups2d.js';
 import { tierFieldState } from '../core/tierfields.js';
 import { tierReadout } from '../recipe/tiers.js';
 import { animationReadout, frameGroupText } from '../recipe/motion.js';
-import { imageToCanvas } from '../raster/png.js';
+import { imageToCanvas, updateCanvas } from '../raster/png.js';
 
 /**
  * @param {HTMLElement} root
  * @param {{ onCopyRecipe:() => void, onExport:() => void, onLock:() => void, onReroll:() => void,
- *           onKeep:() => void }} handlers
+ *           onKeep:() => void, onStrip:() => void, onAPNG:() => void, onPickFrame:(t:number) => void }} handlers
  */
-export function mountInspector(root, { onCopyRecipe, onExport, onLock, onReroll, onKeep }){
+export function mountInspector(root, { onCopyRecipe, onExport, onLock, onReroll, onKeep, onStrip, onAPNG, onPickFrame }){
   root.innerHTML = '';
   const title = document.createElement('h1');
   title.textContent = 'Selected sprite';
   const body = document.createElement('div');
   body.style.display = 'contents';
   root.append(title, body);
+  /* What setFrame redraws: the preview canvas, the frames' images and the
+     strip's figures. null for a still or no selection. */
+  let live = null;
 
   return {
     /** @param {null | { index, seed, sprite, gen, paletteSeed, aut, image, locked, differs:string[],
@@ -36,6 +42,7 @@ export function mountInspector(root, { onCopyRecipe, onExport, onLock, onReroll,
      *  frames: every frame's image when the sprite is animated; fit: generateFrames' fit */
     show(info){
       body.innerHTML = '';
+      live = null;
       if (!info){
         const p = document.createElement('p');
         p.className = 'hint';
@@ -118,15 +125,17 @@ export function mountInspector(root, { onCopyRecipe, onExport, onLock, onReroll,
         const k = Math.max(1, Math.floor(40 / Math.max(sprite.w, sprite.h)));
         info.frames.forEach((image, t) => {
           const fig = document.createElement('figure');
+          fig.addEventListener('click', () => onPickFrame(t));
           if (anim.frameFree[t]) fig.className = 'free';
           fig.title = `Frame ${t}: ${groupById(anim.frameGroups[t]).name}` +
-                      (anim.frameFree[t] ? '' : ' · every cell is a copy of an earlier frame');
+                      (anim.frameFree[t] ? '' : ' · every cell is a copy of an earlier frame') + ' · click to show it';
           const fc = imageToCanvas(image);
           fc.style.width = `${sprite.w * k}px`; fc.style.height = `${sprite.h * k}px`;
           const cap = document.createElement('figcaption'); cap.textContent = String(t);
           fig.append(fc, cap);
           strip.append(fig);
         });
+        live = { cv, frames: info.frames, figs: [...strip.children], shown: -1 };
       }
 
       const cells = document.createElement('div');
@@ -155,7 +164,27 @@ export function mountInspector(root, { onCopyRecipe, onExport, onLock, onReroll,
       b2.title = 'This sprite alone, at the sheet scale';
       b2.addEventListener('click', onExport);
       bar.append(b1, b2);
+      if (live){
+        const b3 = document.createElement('button'); b3.type = 'button'; b3.textContent = '↓ Strip';
+        b3.title = 'Every frame side by side, frame 0 on the left, at the sheet scale';
+        b3.addEventListener('click', onStrip);
+        const b4 = document.createElement('button'); b4.type = 'button'; b4.textContent = '↓ APNG';
+        b4.title = 'The animation as an animated PNG, looping, at the sheet scale and FPS';
+        b4.addEventListener('click', onAPNG);
+        b2.title = 'This sprite alone, at the sheet scale, on the frame shown';
+        bar.append(b3, b4);
+      }
       body.append(...[preview, strip, cells, dl, bar].filter(Boolean));
+    },
+    /** Show the selected sprite at time t (it loops on its own frames). */
+    setFrame(t){
+      if (!live) return;
+      const j = ((t % live.frames.length) + live.frames.length) % live.frames.length;
+      if (j === live.shown) return;
+      const img = live.frames[j];
+      updateCanvas(img, live.cv, [{ x: 0, y: 0, w: img.width, h: img.height }]);
+      live.figs.forEach((f, k) => f.classList.toggle('now', k === j));
+      live.shown = j;
     },
   };
 }

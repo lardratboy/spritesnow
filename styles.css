@@ -67,6 +67,11 @@ button.primary{ background:var(--accent); border-color:var(--accent); color:#fff
 #toolbar{ position:absolute; top:10px; right:10px; display:flex; gap:4px }
 #toolbar button{ background:var(--panel); min-width:32px }
 #toolbar button[aria-pressed="true"]{ background:var(--accent); border-color:var(--accent); color:#fff }
+#playbar{ position:absolute; top:10px; left:10px; display:flex; align-items:center; gap:6px;
+  padding:3px 8px 3px 4px; background:var(--panel); border:1px solid var(--line); border-radius:6px }
+#playbar button{ min-width:32px }
+#playbar input{ width:160px }
+#playbar span{ font:12px/1 ui-monospace, monospace; color:var(--dim); white-space:nowrap }
 #status{ padding:6px 12px; border-top:1px solid var(--line); background:var(--panel); color:var(--dim); min-height:30px }
 #status .warn{ color:var(--warn) }
 #status .bad{ color:var(--bad) }
@@ -129,7 +134,10 @@ button.primary{ background:var(--accent); border-color:var(--accent); color:#fff
   margin:0; display:flex; flex-direction:column; align-items:center; gap:2px; padding:2px;
   background:var(--sunk); border:1px solid var(--line); border-radius:4px;
 }
+#inspector .strip figure{ cursor:pointer }
 #inspector .strip figure.free{ border-color:var(--accent) }
+#inspector .strip figure.now{ background:var(--accent) }
+#inspector .strip figure.now figcaption{ color:#fff }
 #inspector .strip canvas{ image-rendering:pixelated }
 #inspector .strip figcaption{ font:10px/1 ui-monospace, monospace; color:var(--dim) }
 #inspector .recipe-text{ font-family:ui-monospace, monospace; font-size:12px }

@@ -306,9 +306,10 @@ checks that these links decode to these recipes and free cells.
 ## Animated sprites (M6a)
 
 The **Animation** section (under Tiers) sets the number of frames, a
-motion relating them, and a drive that moves the field in time. Until
-M6b, the sheet shows frame 0 and the inspector shows every frame of the
-selected sprite as a strip; there is no playback yet. Each link is a row
+motion relating them, and a drive that moves the field in time. These
+steps were written for M6a, when the sheet showed frame 0 only; since
+M6b the sheet plays. Press **P** to pause and **,** / **.** to step back
+to frame 0 when a step says the sheet shows frame 0. Each link is a row
 of newdesign.md §5.3's table: 16×16 sprites, 16 frames. `spacetime.test.js`
 checks that these links decode to these motions, free frames and free cells.
 
@@ -368,3 +369,54 @@ checks that these links decode to these motions, free frames and free cells.
     has no animation)".
 72. **Link.** On link D, "Copy link", and paste it into a new tab: the same
     sheet, with Motion "Spin" and Drive "Spin · the field turns".
+
+## Playback and export (M6b)
+
+An animated sheet plays. The bar at the top left of the sheet has ▶ / ❚❚,
+a frame scrubber and "frame / loop". **P** plays or pauses, **,** and
+**.** step one frame back or forward. FPS is in the Animation section.
+With "reduce motion" set in the system settings, the sheet starts paused.
+`playback.test.js` checks what these links decode to.
+
+| | What | Loop | Link |
+|---|---|---|---|
+| K | 50×50 sheet of 16×16 sprites, 24 frames, glide: over the on-screen cap | 24, every 4th frame shown | <http://localhost:8000/#r=eyJmIjoic3ByaXRlc25vdy8xIiwiZyI6eyJmcmFtZXMiOjI0LCJtb3Rpb24iOiJtaXJyb3IteCArMS8yIn0sInMiOnsiY29scyI6NTAsInJvd3MiOjUwLCJzY2FsZSI6MX0sInAiOjF9> |
+| L | 8 frames, sway; cell 10 locked with 5 frames, drift 2 and an outline | 40 | <http://localhost:8000/#r=eyJmIjoic3ByaXRlc25vdy8xIiwiZyI6eyJmcmFtZXMiOjgsIm1vdGlvbiI6Im1pcnJvci14IH4ifSwicCI6MSwibyI6eyI5Ijp7ImdlbiI6eyJmcmFtZXMiOjUsImRyaXZlIjoiZHJpZnQiLCJkcml2ZUFtb3VudCI6Miwib3V0bGluZSI6dHJ1ZX0sInBhbGV0dGVTZWVkIjoxfX19> |
+
+73. **Play.** Open link D (spin). The sprites turn as they play, a quarter
+    turn every 4 frames, and the bar reads "0 / 16" up to "15 / 16" and
+    round again. The status line says "16 frames at 8 fps". Press P: the
+    button shows ▶ and the sheet stops. Press . three times: the frame
+    goes up by one each time. Drag the scrubber: the sheet follows.
+74. **FPS.** On link D, set FPS to 2: the sheet slows to two frames a
+    second, and the timeline's new entry reads "FPS 8 → 2". Set it to 24:
+    fast. The bar and the status line show the new rate.
+75. **Inspector.** Click a sprite while it plays. The preview plays too,
+    and the frame shown is filled blue in the strip. Click frame 9 in the
+    strip: the sheet pauses, the bar reads "9 / 16", and the preview and
+    every sprite on the sheet show frame 9.
+76. **Sprite exports.** With frame 9 shown, click ↓ PNG: the file name ends
+    "-f9.png" and it is frame 9. ↓ Strip saves "…-strip.png": 16 frames
+    side by side, frame 0 on the left. ↓ APNG saves "…-16f.png". Drag it
+    into a browser tab: it plays, looping, at the FPS setting.
+77. **Sheet exports.** "↓ Sheet PNG" saves the frame shown ("…-t9.png").
+    "↓ Sheet APNG" saves every frame ("spritesnow-sheet-8x6-16f.png"),
+    which plays in a browser tab. On a still sheet (Frames 1) the Sheet
+    APNG button is hidden.
+78. **2D path.** Open link D with `?gl=0` before the `#`
+    (<http://localhost:8000/?gl=0#r=eyJmIjoic3ByaXRlc25vdy8xIiwiZyI6eyJzeW1tZXRyeSI6Im5vbmUiLCJmcmFtZXMiOjE2LCJtb3Rpb24iOiJyb3Q5MCArMS80IiwiZHJpdmUiOiJzcGluIn0sInAiOjF9>).
+    The status line ends "2D" and the sheet plays the same as with WebGL2.
+79. **Different loops.** Open link L. Cell 10 (second row, second column)
+    is locked with its own 5 frames, drifting and outlined; the rest have
+    8. The bar reads "0 / 40 (loops of up to 8)": after 40 frames, every
+    sprite is back at frame 0 together.
+80. **Cap.** Open link K. The status line says, in amber, "showing every
+    4th frame: all 24 would be 15M sprite cells, over the 4M on-screen
+    cap (exports have every frame)", and the bar adds "· every 4th". The
+    sheet plays coarser, but each loop still takes 3 seconds at 8 fps.
+    Click a sprite: its strip has all 24 frames. "↓ Sheet APNG" saves a
+    24-frame file.
+81. **Pruner.** On link A, set Amount to 2, then 3. Frame 0 is the same in
+    all three (the drive does nothing at frame 0), but the later frames
+    differ. Click ✂ and slide Similarity to 2: neither change is counted
+    for removal, because the hash covers every frame.

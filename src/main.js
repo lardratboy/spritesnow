@@ -13,20 +13,27 @@
    The view draws the sprites with WebGL2 (ui/gl-sheet.js), or the scale-1
    canvas when it cannot; ?gl=0 in the URL forces the canvas. The block
    grid (G) is a view setting: it is not in the recipe or the timeline.
-   An animated sprite (M6a) shows frame 0 on the sheet; the inspector shows
-   every frame of the selected one, as a strip. */
+   An animated sheet (M6b) plays: the player's clock is a whole number of
+   frames, the view shows that time (the GPU picks each sprite's frame;
+   the 2D path is handed that frame's image), and the inspector follows.
+   Play, pause, the frame and the scrubber are view state, like the block
+   grid; fps is in the recipe (sheet.fps), since exports use it too. A
+   sheet over the on-screen cap holds every k-th frame (workshop/sheet.js
+   framePlan), and the status line says so. */
 import { normalize, cellSettings, resizeSheet, soloRecipe } from './recipe/schema.js';
 import { encode, decode } from './recipe/permalink.js';
 import { aut } from './core/groups2d.js';
 import { rasterizeSolo, rasterizePacked, packedLayout, sheetSize } from './raster/rasterize.js';
-import { imageToCanvas, updateCanvas, canvasFits, downloadPNG, downloadBlob } from './raster/png.js';
+import { imageToCanvas, updateCanvas, canvasFits, downloadPNG, downloadBlob, downloadAPNG, APNG_LIMIT } from './raster/png.js';
 import { createTimeline, commit, goTo, deleteEntry, dropEntries, prunePlan, markKeyframe,
          setRecording } from './workshop/timeline.js';
-import { averageHash } from './workshop/frame-hash.js';
 import { isLocked, toggleLock, rerollCell, reseedUnlocked, lockedDifferences } from './workshop/cells.js';
 import { keep, rename, remove, move, restore, packGrid } from './workshop/collection.js';
 import { saveSession, readSession } from './workshop/session.js';
-import { createSpriteCache, cachedSprite, buildSheet, sheetLayout, sheetAtScale, framesOf } from './workshop/sheet.js';
+import { createSpriteCache, cachedSprite, buildSheet, sheetLayout, framesOf, frameIndex, atFrame,
+         sheetFrame, sheetHash, ATLAS_CAP } from './workshop/sheet.js';
+import { generateFrames } from './core/generate.js';
+import { paletteFor } from './core/palette.js';
 import { mountControls } from './ui/controls.js';
 import { mountSheetView } from './ui/sheet-view.js';
 import { mountInspector } from './ui/inspector.js';
@@ -63,6 +70,7 @@ function render(){
   view.setSelection(selected);
   controls.update(recipe);
   showInspector();
+  syncPlayer();
   built = { ms: performance.now() - t0, generated: sheet.generated, count: built.count + 1 };
   setStatus();
   writeHash();
@@ -71,7 +79,7 @@ function render(){
 function showInspector(){
   if (selected < 0) return inspector.show(null);
   const sprite = sheet.sprites[selected], c = cellSettings(recipe, selected);
-  const anim = c.gen.frames > 1 ? framesOf(c.seed, c.gen, c.paletteSeed) : null;
+  const anim = c.gen.frames > 1 ? framesOf(c.seed, c.gen, c.paletteSeed, sheet.plan.stride === 1 ? cache : null) : null;
   inspector.show({
     index: selected, seed: c.seed, sprite, gen: c.gen, paletteSeed: c.paletteSeed,
     aut: aut(sprite.grid, sprite.w, sprite.h), image: rasterizeSolo(sprite, { scale: 1 }),
@@ -79,15 +87,25 @@ function showInspector(){
     fit: anim ? anim.fit : null,
     locked: isLocked(recipe, selected), differs: lockedDifferences(recipe, selected),
   });
+  inspector.setFrame(player.t);
 }
 
 /* The status line: the last build, then the latest note. "generated" counts
    the sprites that were not in the cache, so a one-cell reroll says 1. */
 function setStatus(){
   const { cols, rows } = recipe.sheet, { w, h } = recipe.gen, { ms, generated } = built;
-  const status = $('status');
+  const status = $('status'), plan = sheet.plan;
   status.textContent = `${cols * rows} sprites · ${w}×${h} · scale ${recipe.sheet.scale} · ` +
+    (plan.T > 1 ? `${plan.T} frames at ${recipe.sheet.fps} fps · ` : '') +
     `${generated} generated, built in ${ms < 10 ? ms.toFixed(1) : ms.toFixed(0)} ms · ${view.renderer}`;
+  if (plan.stride > 1){
+    const span = document.createElement('span');
+    span.className = 'warn';
+    span.textContent = ` · showing ${plan.frames > 1 ? `every ${ordinal(plan.stride)} frame` : 'frame 0 only'}: ` +
+                       `all ${plan.T} would be ${mega(plan.full)} sprite cells, ` +
+                       `over the ${mega(ATLAS_CAP)} on-screen cap (exports have every frame)`;
+    status.append(span);
+  }
   if (note){
     const span = document.createElement('span');
     span.className = note.cls || '';
@@ -96,6 +114,81 @@ function setStatus(){
   }
 }
 const say = (text, cls) => { note = { text, cls }; };
+const mega = n => { const m = n / 1048576; return `${m < 10 && m % 1 ? m.toFixed(1) : Math.round(m)}M`; };
+const ordinal = n => n + (n % 10 === 1 && n % 100 !== 11 ? 'st' : n % 10 === 2 && n % 100 !== 12 ? 'nd'
+                          : n % 10 === 3 && n % 100 !== 13 ? 'rd' : 'th');
+
+/* ------------------------------------------------------------- animation
+   The clock counts whole frames from when play was pressed (or the recipe
+   last changed), so frames keep time at sheet.fps whatever the display's
+   refresh rate. The loop is plan.loop frames. */
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const player = { playing: !reduceMotion, t: 0, raf: 0, from: 0, t0: 0 };
+const frameCanvas = document.createElement('canvas');
+
+/* The sheet at time t for the 2D path: the scale-1 sheet when every sprite
+   is on its frame 0 there. */
+function frameImage(t){
+  if (sheet.plan.T <= 1 || sheet.sprites.every(s => frameIndex(s, t) === 0)) return sheetCanvas;
+  return imageToCanvas(sheetFrame(sheet, t), frameCanvas);
+}
+function showFrame(t){
+  player.t = t;
+  view.setFrame(t, view.renderer === '2D' ? frameImage(t) : null);
+  inspector.setFrame(t);
+  playbar.update();
+}
+function tick(now){
+  player.raf = 0;
+  if (!player.playing || sheet.plan.loop <= 1) return;
+  const t = (player.from + Math.floor((now - player.t0) * recipe.sheet.fps / 1000)) % sheet.plan.loop;
+  if (t !== player.t) showFrame(t);
+  player.raf = requestAnimationFrame(tick);
+}
+function runClock(){
+  cancelAnimationFrame(player.raf);
+  player.raf = 0;
+  if (!player.playing || sheet.plan.loop <= 1) return;
+  player.from = player.t; player.t0 = performance.now();
+  player.raf = requestAnimationFrame(tick);
+}
+/** After a build: keep the time inside the new loop and show it. */
+function syncPlayer(){
+  showFrame(player.t % sheet.plan.loop);
+  runClock();
+}
+function setPlaying(on){
+  player.playing = on;
+  runClock();
+  playbar.update();
+}
+function stepFrame(d){
+  const L = sheet.plan.loop;
+  if (L <= 1) return;
+  player.playing = false;
+  runClock();
+  showFrame(((player.t + d) % L + L) % L);
+}
+
+const playbar = (() => {
+  const bar = $('playbar'), play = $('play'), scrub = $('scrub'), readout = $('frame-no');
+  play.addEventListener('click', () => setPlaying(!player.playing));
+  scrub.addEventListener('input', () => { player.playing = false; runClock(); showFrame(Number(scrub.value)); });
+  return {
+    update(){
+      if (!sheet) return;
+      const { loop, T, stride } = sheet.plan;
+      bar.classList.toggle('hidden', loop <= 1);
+      play.textContent = player.playing ? '❚❚' : '▶';
+      play.setAttribute('aria-pressed', String(player.playing));
+      play.title = `${player.playing ? 'Pause' : 'Play'} the animation (P); , and . step a frame`;
+      scrub.max = String(loop - 1);
+      if (document.activeElement !== scrub) scrub.value = String(player.t);
+      readout.textContent = `${player.t} / ${loop}` + (loop !== T ? ` (loops of up to ${T})` : '') +
+                            (stride > 1 ? (sheet.plan.frames > 1 ? ` · every ${ordinal(stride)}` : ' · frame 0 only') : '');
+    },
+  };
+})();
 
 /* The hash is written after a short pause, so dragging a slider does not
    flood the browser history API. replaceState never fires hashchange. */
@@ -112,8 +205,9 @@ function writeHash(){
 let playTimer = 0;
 const showTimeline = () => timelineView.refresh(tl, { playing: !!playTimer });
 /* The pruner hashes the sheet at scale 1, so an entry's hash does not
-   depend on its scale (before M4a it hashed the sheet at its scale). */
-const liveOpts = () => ({ hash: averageHash(sheet.image) });
+   depend on its scale (before M4a it hashed the sheet at its scale). An
+   animated sheet's hash covers every frame it holds (M6b). */
+const liveOpts = () => ({ hash: sheetHash(sheet) });
 
 /* Record the live recipe (it is already rendered, so the sheet canvas is
    its picture). With REC off this only marks the recipe as unrecorded. */
@@ -209,12 +303,28 @@ const ACTIONS = {
   },
   'new-palette'(){ apply({ ...recipe, paletteSeed: randomU32() }, 'palette', 'new palette'); },
   'copy-link'(){ lastHash = encode(recipe); history.replaceState(null, '', lastHash); copyText(location.href, 'Link'); },
+  /* The sheet as shown: at an animated sheet's current time. */
   'export-sheet'(){
-    const { cols, rows, scale } = recipe.sheet, r = recipe, list = sheet.sprites, layout = sheetLayout(r);
+    const { cols, rows, scale } = recipe.sheet, build = sheet, layout = sheetLayout(recipe), t = player.t;
     let fits = scale;
     while (fits > 1 && !sizeFits(sheetSize(layout, fits))) fits--;
-    exportPNG(sheetSize(layout, scale), () => sheetAtScale(r, list), `spritesnow-sheet-${cols}x${rows}.png`,
-              ` at scale ${scale}; scale ${fits} fits`);
+    exportPNG(sheetSize(layout, scale), () => sheetFrame(build, t, scale),
+              `spritesnow-sheet-${cols}x${rows}${build.plan.T > 1 ? `-t${t}` : ''}.png`, ` at scale ${scale}; scale ${fits} fits`);
+  },
+  /* Every frame of the loop, every sprite on every frame, whatever the
+     on-screen cap. */
+  async 'export-apng'(){
+    const { cols, rows, scale, fps } = recipe.sheet, r = recipe, plan = sheet.plan, layout = sheetLayout(r);
+    if (plan.loop <= 1){ say('the sheet is a still: set Frames above 1 to export an animation'); return setStatus(); }
+    const size = sheetSize(layout, scale), name = `spritesnow-sheet-${cols}x${rows}-${plan.loop}f.png`;
+    if (!checkAnimation(size, plan.loop, name, scale)) return;
+    const full = plan.stride === 1 ? sheet.sprites : r.seeds.map((_, i) => {
+      const c = cellSettings(r, i);
+      return generateFrames(c.seed, c.gen, paletteFor(c.paletteSeed, c.gen.bpc));
+    });
+    const build = { sprites: full, layout };
+    await saveAnimation({ ...size, count: plan.loop, fps, frame: t => sheetFrame(build, t, scale) }, name,
+                        `exported ${plan.loop} frames at ${fps} fps as ${name}`);
   },
   'save-session': () => saveFile(),
 };
@@ -247,6 +357,21 @@ function select(i, { shift = false, mod = false, alt = false } = {}){
 /* Exports rasterise at the sheet's scale when asked. One too big for a
    browser canvas is refused before its pixels are allocated. */
 const sizeFits = ({ width, height }) => canvasFits(width, height);
+/* An animation is refused when one frame would not fit a canvas, or all
+   of them together would be more than APNG_LIMIT bytes. */
+function checkAnimation({ width, height }, count, filename, scale){
+  const bytes = width * height * 4 * count;
+  if (sizeFits({ width, height }) && bytes <= APNG_LIMIT) return true;
+  say(`${filename} would be ${count} frames of ${width}×${height} px (${mega(bytes)}B), too big to export at scale ${scale}`, 'bad');
+  setStatus();
+  return false;
+}
+async function saveAnimation(opts, filename, done){
+  say(`encoding ${filename}…`); setStatus();
+  const ok = await downloadAPNG(opts, filename);
+  say(ok ? done : `the browser could not encode ${filename}`, ok ? '' : 'bad');
+  setStatus();
+}
 /** @returns {Promise<boolean>} whether the PNG was saved */
 async function exportPNG(size, make, filename, hint = ''){
   const px = `${size.width}×${size.height} px`, fail = text => { say(text, 'bad'); setStatus(); return false; };
@@ -309,9 +434,9 @@ async function loadFile(file){
   // one sheet at a time: keep its hash and a thumbnail, not the image
   const scratch = document.createElement('canvas');
   for (const e of got.tl.entries){
-    const { image } = buildSheet(e.recipe, cache);
-    e.hash = averageHash(image);
-    timelineView.setThumb(e, timelineView.makeThumb(imageToCanvas(image, scratch)));
+    const build = buildSheet(e.recipe, cache);
+    e.hash = sheetHash(build);
+    timelineView.setThumb(e, timelineView.makeThumb(imageToCanvas(build.image, scratch)));
   }
   Object.assign(tl, got.tl);
   items = got.items;
@@ -336,17 +461,42 @@ const controls = mountControls($('controls'), {
 const view = mountSheetView($('stage'), { onSelect: select, gl: new URLSearchParams(location.search).get('gl') !== '0' });
 /* For the browser tests (test/browser/) and the console: builds counts
    render() calls, so a test can tell that pan and zoom rebuilt nothing. */
-window.spritesnow = { view, stats: () => ({ builds: built.count, ...view.stats() }) };
+window.spritesnow = {
+  view, stats: () => ({ builds: built.count, ...view.stats() }),
+  player: { play: () => setPlaying(true), pause: () => setPlaying(false), show: showFrame,
+            get t(){ return player.t; }, get playing(){ return player.playing; }, get plan(){ return sheet.plan; } },
+};
 const inspector = mountInspector($('inspector'), {
   onCopyRecipe(){ copyText(JSON.stringify(soloRecipe(cellSettings(recipe, selected), recipe.sheet), null, 2), 'Recipe'); },
+  /* The sprite as shown, at an animated sprite's current frame. */
   onExport(){
-    const s = sheet.sprites[selected];
-    downloadPNG(rasterizeSolo(s, { scale: recipe.sheet.scale }), `spritesnow-${recipe.seeds[selected].toString(16)}.png`);
+    const s = selectedFrames(), j = s.T > 1 ? player.t % s.T : 0;
+    downloadPNG(rasterizeSolo(atFrame(s, j), { scale: recipe.sheet.scale }),
+                `spritesnow-${recipe.seeds[selected].toString(16)}${s.T > 1 ? `-f${j}` : ''}.png`);
   },
+  /* Every frame side by side, frame 0 on the left. */
+  onStrip(){
+    const s = selectedFrames(), scale = recipe.sheet.scale, name = `spritesnow-${recipe.seeds[selected].toString(16)}-strip.png`;
+    exportPNG({ width: s.w * s.T * scale, height: s.h * scale },
+              () => rasterizePacked(s.frames.map((_, j) => atFrame(s, j)), { cols: s.T, spacing: 0 }, { scale }), name);
+  },
+  async onAPNG(){
+    const s = selectedFrames(), { scale, fps } = recipe.sheet, size = { width: s.w * scale, height: s.h * scale };
+    const name = `spritesnow-${recipe.seeds[selected].toString(16)}-${s.T}f.png`;
+    if (!checkAnimation(size, s.T, name, scale)) return;
+    await saveAnimation({ ...size, count: s.T, fps, frame: j => rasterizeSolo(atFrame(s, j), { scale }) }, name,
+                        `exported ${s.T} frames at ${fps} fps as ${name}`);
+  },
+  onPickFrame(t){ player.playing = false; runClock(); showFrame(t); },
   onLock: () => onSelected('lock'),
   onReroll: () => onSelected('reroll'),
   onKeep: () => onSelected('keep'),
 });
+/* The selected sprite with every frame (a still: its one frame). */
+function selectedFrames(){
+  const c = cellSettings(recipe, selected);
+  return framesOf(c.seed, c.gen, c.paletteSeed, sheet.plan.stride === 1 ? cache : null);
+}
 $('fit').addEventListener('click', () => view.fit());
 function toggleBlocks(){
   view.setBlockGrid(!view.blockGrid);
@@ -370,6 +520,8 @@ const KEYS = {
   Home: () => jump(0), End: () => jump(tl.entries.length - 1),
   ' ': togglePlay,
   b: mark,
+  p: () => { if (sheet.plan.loop > 1) setPlaying(!player.playing); },
+  ',': () => stepFrame(-1), '.': () => stepFrame(1),
   Delete: () => { const before = tl.entries[tl.playhead]; if (deleteEntry(tl, tl.playhead)) removed(before); },
 };
 KEYS.Backspace = KEYS.Delete;

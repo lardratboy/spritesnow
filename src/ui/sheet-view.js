@@ -13,7 +13,10 @@
    The block grid (M5c) is drawn on the same 2D canvas, in device pixels:
    an edge at sheet x lands on the first device pixel whose centre shows
    sheet x or more, the rule both the shader and drawImage use, so it lines
-   up with the sprite pixels on either path. */
+   up with the sprite pixels on either path.
+   Animation (M6b): setFrame(t) shows time t. The GPU picks every
+   sprite's frame from the atlas; the 2D path is handed the sheet image
+   for that frame. */
 import { createGLSheet } from './gl-sheet.js';
 import { blockEdges } from '../workshop/sheet.js';
 
@@ -37,7 +40,7 @@ export function mountSheetView(root, { onSelect, gl = true }){
   const canvas = document.createElement('canvas');
   root.append(canvas);
   const ctx = canvas.getContext('2d');
-  let image = null, layout = null, scale = 1, selected = -1, locked = [], onGPU = false;
+  let image = null, layout = null, scale = 1, selected = -1, locked = [], onGPU = false, frame = 0;
   let built = null, grid = false, edges = null;      // edges: blockEdges of the build, made when first drawn
   let view = { x: 0, y: 0, s: 1 }, sizeKey = '';
 
@@ -206,6 +209,15 @@ export function mountSheetView(root, { onSelect, gl = true }){
     /** 'WebGL2', or '2D' when WebGL2 is off, unavailable or the sheet is
      *  too big for the GPU's textures */
     get renderer(){ return onGPU ? 'WebGL2' : '2D'; },
+    /** Show time t (M6b). @param {HTMLCanvasElement} [img]  the sheet at
+     *  time t, scale 1, for the 2D path (it is not used on the GPU) */
+    setFrame(t, img){
+      frame = t;
+      gpu?.setFrame(t);
+      if (img) image = img;
+      draw();
+    },
+    get frame(){ return frame; },
     /** The view for tests and the console: x, y in CSS px, s the zoom
      *  relative to the exported sheet. */
     getView: () => ({ ...view }),

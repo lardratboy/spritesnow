@@ -169,7 +169,7 @@ test('every motion element keeps every animation; frame 0 is the still when the 
   ];
   const TS = [2, 3, 4, 6, 8, 12, 16, 24];
   const groupIds = [null, ...SUBGROUPS.map(g => g.id)];
-  let cases = 0, elementChecks = 0, sameFrame0 = 0, addsNothing = 0;
+  let cases = 0, elementChecks = 0, sameFrame0 = 0, addsNothing = 0, timesChecks = 0;
   for (let i = 0; i < 360; i++){
     const square = rnd() < 0.8, w = 4 + ((rnd() * 29) | 0), h = square ? w : 4 + ((rnd() * 29) | 0);
     const T = pick(TS), symmetry = pick(SUBGROUPS).id;
@@ -233,12 +233,26 @@ test('every motion element keeps every animation; frame 0 is the still when the 
     // the leading frames alone are the same frames
     const k = 1 + ((rnd() * T) | 0);
     assert.deepEqual(frames(seed, gen, { count: k }).frames, s.frames.slice(0, k), `${label}: count ${k}`);
+    // M6b: every k-th frame, or any increasing list, gives the same frames
+    // (a second RNG, so the cases above stay the ones M6a drew)
+    const sub = mulberry32(i), stride = 2 + ((sub() * 3) | 0);
+    const lists = [Array.from({ length: Math.ceil(T / stride) }, (_, j) => j * stride),
+                   Array.from({ length: T }, (_, t) => t).filter(() => sub() < 0.4)];
+    for (const times of lists){
+      if (!times.length) continue;
+      const got = frames(seed, gen, { times });
+      assert.deepEqual(got.times, times, `${label}: times ${times}`);
+      assert.deepEqual(got.frames, times.map(t => s.frames[t]), `${label}: times ${times}`);
+      timesChecks++;
+    }
     cases++;
   }
   assert.equal(cases, 360);
   assert.ok(elementChecks > 250, `only ${elementChecks} element checks`);
   assert.ok(addsNothing > 150 && sameFrame0 === addsNothing, `${sameFrame0} of ${addsNothing}`);
-  t.diagnostic(`${cases} cases, ${elementChecks} motion elements checked, frame 0 is the still in ${sameFrame0} of ${addsNothing}`);
+  assert.ok(timesChecks > 600, `only ${timesChecks} frame lists checked`);
+  t.diagnostic(`${cases} cases, ${elementChecks} motion elements checked, frame 0 is the still in ${sameFrame0} of ${addsNothing}, ` +
+               `${timesChecks} frame lists equal the full build`);
 });
 
 /* ---------------------------------------------------------------- drives */

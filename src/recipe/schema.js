@@ -39,7 +39,8 @@ export const DEFAULT_RECIPE = Object.freeze({
     driveAmount: 1,         // cycles, turns or radius per loop
     bpc: 3, ncol: 4, colorMode: 'bands', sortLum: true,
   }),
-  sheet: Object.freeze({ cols: 8, rows: 6, spacing: 2, scale: 4 }),
+  sheet: Object.freeze({ cols: 8, rows: 6, spacing: 2, scale: 4,
+                         fps: 8 }),         // animation: frames per second on screen and in APNG export
   paletteSeed: 0,
   seeds: Object.freeze([]),
   overrides: Object.freeze({}),
@@ -54,7 +55,7 @@ export const SETTING_LABELS = {
   'gen.tiers':'Tiers', 'gen.tierField':'Tier field',
   'gen.frames':'Frames', 'gen.motion':'Motion', 'gen.drive':'Drive', 'gen.driveAmount':'Drive amount',
   'gen.bpc':'Gamut', 'gen.ncol':'Colours', 'gen.colorMode':'Colour mode', 'gen.sortLum':'Sort by luminance',
-  'sheet.cols':'Columns', 'sheet.rows':'Rows', 'sheet.spacing':'Spacing', 'sheet.scale':'Scale',
+  'sheet.cols':'Columns', 'sheet.rows':'Rows', 'sheet.spacing':'Spacing', 'sheet.scale':'Scale', 'sheet.fps':'FPS',
 };
 
 /* What each setting may hold. Ranges are the old app's <input> min/max. */
@@ -78,6 +79,7 @@ export const GEN_SPEC = {
 export const SHEET_SPEC = {
   cols: num(1, 50, true), rows: num(1, 50, true), spacing: num(0, 16, true),
   scale: num(1, 24, true),   // v1 is integer scale only (newdesign.md §3)
+  fps: num(1, 60, true),
 };
 
 function coerce(spec, value, fallback){

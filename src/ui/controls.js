@@ -7,7 +7,8 @@
    tier field (M5b), shown while tiers are on or a field is set.
    The Animation section (newdesign.md §5.3, M6a) is table rows (Frames,
    Drive, Amount) with two slots built by mountAnimation: the motion
-   picker, and the notes under the drive. */
+   picker, and the notes under the drive. FPS (M6b) is a sheet setting
+   shown in that section: a row may name its own part. */
 import { FIELDS } from '../core/fields.js';
 import { MASKS } from '../core/masks.js';
 import { SUBGROUPS, groupById, effectiveGroup, orbitTable } from '../core/groups2d.js';
@@ -54,6 +55,7 @@ const SECTIONS = [
     { key:'drive', type:'select', label:'Drive', show: animated,
       options:[['phase','Phase · the bands flow'], ['spin','Spin · the field turns'], ['drift','Drift · the field circles']] },
     { key:'driveAmount', type:'number', label:'Amount', min:-16, max:16, show: animated },
+    { key:'fps', part:'sheet', type:'number', label:'FPS', min:1, max:60, show: animated },
     { type:'slot', key:'notes' },
   ]},
   { title: 'Palette', rows: [
@@ -85,11 +87,11 @@ export function mountControls(root, { onChange, onAction, onLoad }){
   const anim = mountAnimation(patch => onChange('gen', patch));
 
   for (const section of SECTIONS){
-    const part = section.part || 'gen';
     const box = el('div', 'group');
     box.append(el('div', 'title', section.title));
     for (const row of section.rows){
       if (row.type === 'slot'){ box.append(anim[row.key]); continue; }
+      const part = row.part || section.part || 'gen';
       const id = `c-${part}-${row.key}`;
       const line = el('div', 'row');
       let input, readout = null;
@@ -142,6 +144,8 @@ export function mountControls(root, { onChange, onAction, onLoad }){
   }
 
   // actions
+  const apng = button('↓ Sheet APNG', () => onAction('export-apng'), null,
+                      'The animated sheet as an animated PNG, every frame, at the sheet scale and FPS');
   const actions = el('div', 'group');
   actions.append(el('div', 'title', 'Actions'));
   const bar = el('div', 'buttons');
@@ -150,7 +154,8 @@ export function mountControls(root, { onChange, onAction, onLoad }){
   bar.append(
     button('Regenerate', () => onAction('regenerate'), 'primary', 'New seeds for every unlocked cell (R)'),
     button('Copy link', () => onAction('copy-link'), null, 'The link is the recipe: it rebuilds this exact sheet'),
-    button('↓ Sheet PNG', () => onAction('export-sheet'), null, 'Transparent PNG at the sheet scale'),
+    button('↓ Sheet PNG', () => onAction('export-sheet'), null, 'Transparent PNG at the sheet scale (an animated sheet: the frame shown)'),
+    apng,
     button('↓ Save session', () => onAction('save-session'), null, 'Save the timeline and the collection as one file'),
     button('↑ Load session', () => file.click(), null,
            'Open a saved session, from spritesnow or the old sprite generator. It replaces the current timeline and collection'),
@@ -158,6 +163,7 @@ export function mountControls(root, { onChange, onAction, onLoad }){
   actions.append(bar, file);
   actions.append(el('div', 'hint', 'Click a sprite to inspect it. Drag to pan, scroll to zoom. R regenerates, F fits. ' +
     '← → step through the timeline, Space replays it, B makes a keyframe. ' +
+    'P plays or pauses an animation; , and . step a frame. ' +
     'L locks the selected sprite, Shift+R rerolls it, K keeps it in the collection ' +
     '(or ⌘/Ctrl-click, Shift-click, Alt-click).'));
   root.append(actions);
@@ -186,6 +192,7 @@ export function mountControls(root, { onChange, onAction, onLoad }){
       if (eff.reduced)
         note.textContent = `A ${g.w}×${g.h} sprite is not square, so this becomes ${groupById(eff.id).name}.`;
       tiersBox.update(g);
+      apng.classList.toggle('hidden', !(g.frames > 1 || Object.values(recipe.overrides).some(o => o.gen.frames > 1)));
       // animation needs the corrected fold, as tiers do
       inputs.find(i => i.row.key === 'frames').el.disabled = g.fold !== 2;
       anim.update(g);
@@ -421,7 +428,7 @@ function mountAnimation(setGen){
     if (note.textContent) note.classList.add('warn');
     summary.textContent = r?.on
       ? `${r.freeFrames} of ${r.T} frames free · ${fmt(r.orbits)} free cells` +
-        (r.motion?.on ? ` (${fmt(r.still)} without the motion)` : '') + '. The sheet shows frame 0; the inspector shows every frame.'
+        (r.motion?.on ? ` (${fmt(r.still)} without the motion)` : '') + '. ▶ above the sheet plays it (P).'
       : g.frames <= 1 ? 'One frame is a still. More frames make an animation.' : '';
   }
 

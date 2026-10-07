@@ -4,7 +4,7 @@ A 2D procedural sprite generator. The core is a pure function, **recipe in,
 sprite out, same bytes every time**, and symmetry comes from an explicit
 group engine (the 10 subgroups of the square's symmetry group D4).
 
-Status: **v1 (M0–M2) and M3 (the workshop: timeline, lock and reroll, collection, session save/load) done.** The plan and milestone status are in
+Status: **v1 (M0–M2), M3 (the workshop), M4 (WebGL2 rendering), M5 (tiered sprites) and M6a–M6b (animated sprites, playback and APNG export) done.** The plan and milestone status are in
 [docs/newdesign.md](docs/newdesign.md). Browser checks are listed in [test/smoke.md](test/smoke.md).
 
 ## Run it
@@ -32,7 +32,7 @@ needs `block-showroom` as a sibling folder.
 |---|---|
 | `src/core/` | Pure generation code: no DOM, runs in Node and workers |
 | `src/recipe/` | Recipe schema, permalink, importer for old sessions |
-| `src/raster/` | Integer-scale rasteriser and PNG export |
+| `src/raster/` | Integer-scale rasteriser, the GPU atlas, PNG and APNG export |
 | `src/workshop/` | Pure workshop logic: the timeline, the pruner's frame hash, lock and reroll, the collection, session files |
 | `src/ui/` | Browser UI |
 | `reference/` | The old 2D app, **read-only**. It is the test oracle |

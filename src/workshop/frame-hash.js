@@ -3,7 +3,9 @@
    an 8×8 average hash of the sheet image (mosprites-ng's frameHash).
    NG hashed its canvas thumbnail, so its hash depended on the browser's
    smoothing. This one box-averages the rasterised sheet directly, so it is
-   pure and the same in every browser and in Node. */
+   pure and the same in every browser and in Node.
+   An animated sheet (M6b) hashes every frame it holds: its hash is the
+   frames' hashes in order, two numbers each (workshop/sheet.js sheetHash). */
 import { popcount } from '../core/fields.js';
 
 export const HASH_N = 8;
@@ -40,5 +42,13 @@ export function averageHash(image){
   return [lo >>> 0, hi >>> 0];
 }
 
-/** Number of differing bits between two hashes (0..64). */
-export const hamming = (a, b) => popcount(a[0] ^ b[0]) + popcount(a[1] ^ b[1]);
+/** How different two hashes are, 0..64: the number of differing bits, or
+ *  for animated sheets the most in any one frame, so the pruner's
+ *  threshold means the same for stills and animations. Hashes of different
+ *  frame counts are as different as can be (64). */
+export function hamming(a, b){
+  if (a.length !== b.length) return 64;
+  let most = 0;
+  for (let k = 0; k < a.length; k += 2) most = Math.max(most, popcount(a[k] ^ b[k]) + popcount(a[k+1] ^ b[k+1]));
+  return most;
+}
