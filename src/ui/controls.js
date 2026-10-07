@@ -130,7 +130,8 @@ export function mountControls(root, { onChange, onAction, onImport }){
     button('↑ Old session', () => file.click(), null, 'Load a session saved by the old sprite generator'),
   );
   actions.append(bar, file);
-  actions.append(el('div', 'hint', 'Click a sprite to inspect it. Drag to pan, scroll to zoom. R regenerates, F fits.'));
+  actions.append(el('div', 'hint', 'Click a sprite to inspect it. Drag to pan, scroll to zoom. R regenerates, F fits. ' +
+    '← → step through the timeline, Space replays it, B makes a keyframe.'));
   root.append(actions);
 
   const note = root.querySelector('#symmetry-note');

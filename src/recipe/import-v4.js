@@ -37,9 +37,11 @@ export function genFromLegacyCfg(cfg){
 
 /** Read a session saved by the old app ("↓ Session").
  *  @param {string | object} json  the file's text, or the parsed object
- *  @returns {{ recipes:object[], playhead:number, notes:string[] }}
- *    one recipe per timeline entry, oldest first; `playhead` indexes the
- *    entry the user was looking at when they saved */
+ *  @returns {{ recipes:object[], entries:object[], playhead:number, notes:string[] }}
+ *    one recipe per timeline entry, oldest first; `entries` adds each one's
+ *    label, kind, time and keyframe flag (the old `bookmark`), for the
+ *    timeline; `playhead` indexes the entry the user was looking at when
+ *    they saved */
 export function importSession(json){
   const d = typeof json === 'string' ? JSON.parse(json) : json;
   if (!d || d.format !== 'sprite-gen-timeline')
@@ -51,8 +53,12 @@ export function importSession(json){
              : { cfg: x.cfg, cells: d.cellPool[x.cells], paletteSeed: x.paletteSeed };
     return recipeFromState(st, notes);
   });
+  const entries = d.entries.map((x, i) => ({
+    recipe: recipes[i], kind: x.key || 'import', label: x.label || `entry ${i + 1}`,
+    ts: x.ts || 0, keyframe: !!x.bookmark,
+  }));
   const playhead = Math.max(0, Math.min(d.playhead ?? recipes.length - 1, recipes.length - 1));
-  return { recipes, playhead, notes: [...notes] };
+  return { recipes, entries, playhead, notes: [...notes] };
 }
 
 /* One timeline state -> one recipe. Locked cells carry their own cfg and

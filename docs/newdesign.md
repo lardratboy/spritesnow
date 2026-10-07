@@ -59,7 +59,8 @@ spritesnow/
 │   │   └── generate.js        generateSprite(seed, recipe) → { grid, colors, meta }
 │   ├── recipe/                schema, defaults, validate, permalink, v4 importer
 │   ├── raster/                integer-scale sheet and solo rasteriser, PNG export
-│   └── ui/                    controls, sheet view, inspector
+│   ├── workshop/              pure: timeline (take, keyframes, pruner), frame hash
+│   └── ui/                    controls, sheet view, inspector, timeline strip
 ├── reference/
 │   └── symmetrical_sprite_generator.html   the old v4 app, read-only, the oracle
 └── test/
@@ -83,7 +84,7 @@ Three rules:
 | **M0** ✅ | **Scaffold and oracle** | The project runs on `npm run serve`. `npm test` loads the old generator from `reference/` and writes goldens for the fixture matrix. *Done 2026-10-06: 1,568 goldens (7 modes × 8 sizes × 7 sources × 4 seeds), and the reference file's hash is pinned* |
 | **M1** ✅ | **Core and symmetry engine** | The ported core matches the goldens wherever the old fold was correct. `groups.test.js` passes for all 10 groups on every grid from 2×2 to 40×40. The measurement scripts from `from3Dto2D.md` become these tests. *✅ 2026-10-06. M1a: the core is ported, and with `fold: 1` it matches all 1,568 goldens and the reference's recipe text. M1b: the D4 engine covers all 10 subgroups, decides once per orbit, and reports the effective group and `aut()`. With `fold: 2` every sprite is symmetric on every grid from 2×2 to 40×40, and on all 1,204 fixtures where the old fold was exact it matches the old output byte for byte* |
 | **M2** ✅ | **Minimal app (v1)** | A browser user can generate a sheet, pick from all 10 symmetries, see the effective group and aut, copy a recipe or permalink, export PNG, and load an old v4 session. *Done 2026-10-06: recipe schema, permalink, old-session import (locked cells included, checked against the reference) and an integer-scale rasteriser, all Node-tested. Browser checklist in `test/smoke.md`* |
-| M3 | Workshop | Timeline (NG's take/keyframe version), collection, lock and reroll are ported |
+| M3 | Workshop | Timeline (NG's take/keyframe version), collection, lock and reroll are ported. Three steps: **M3a ✅ timeline**, M3b lock and reroll, M3c collection and session save/load. *M3a done 2026-10-06: the take is a pure module (`src/workshop/timeline.js`) holding whole recipes: append-only with branch pointers, REC, ◆ keyframes, keys-only filter, slider-drag coalescing, a 400-entry cap that spares keyframes, and the pruner. NG's T1–T6 timeline self-tests are Node tests. Two deliberate changes from NG: the pruner's 8×8 average hash is computed from the rasterised sheet, not a browser-smoothed thumbnail, so it is exact and testable; and a new entry is labelled against the entry it branched from. An old v4 session now loads as its whole timeline (bookmarks become keyframes), appended after the current entries rather than replacing them, since sessions cannot be saved until M3c* |
 | M4+ | Choose from the backlog | Readouts and orientation sheets (from3Dto2D P2–P3), the seam kernel, tiered sprites, 3D, tiling |
 
 ## 7. Starter zip contents

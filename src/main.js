@@ -2,7 +2,9 @@
    The recipe is the only state that matters. Everything on screen is
    rebuilt from it, and the URL hash always holds it, so a copied link
    rebuilds the same sheet. Randomness for NEW seeds lives here, in the UI;
-   src/core/ never calls Math.random. */
+   src/core/ never calls Math.random.
+   The timeline (workshop/timeline.js) records the recipe after every
+   change, so any entry replays exactly what was on screen. */
 import { normalize, cellSettings, resizeSheet } from './recipe/schema.js';
 import { encode, decode } from './recipe/permalink.js';
 import { importSession } from './recipe/import-v4.js';
@@ -11,9 +13,13 @@ import { paletteFor } from './core/palette.js';
 import { aut } from './core/groups2d.js';
 import { rasterizeSheet, rasterizeSolo } from './raster/rasterize.js';
 import { imageToCanvas, downloadPNG } from './raster/png.js';
+import { createTimeline, commit, goTo, deleteEntry, dropEntries, prunePlan, markKeyframe, setRecording,
+         appendEntries } from './workshop/timeline.js';
+import { averageHash } from './workshop/frame-hash.js';
 import { mountControls } from './ui/controls.js';
 import { mountSheetView } from './ui/sheet-view.js';
 import { mountInspector } from './ui/inspector.js';
+import { mountTimelineView } from './ui/timeline-view.js';
 
 const $ = id => document.getElementById(id);
 const randomU32 = () => crypto.getRandomValues(new Uint32Array(1))[0];
@@ -26,26 +32,33 @@ let recipe;
 let sprites = [];
 let selected = -1;
 let note = null;              // { text, cls } shown in the status line until the next action
+const tl = createTimeline();
 
 /* ---------------------------------------------------------------- render */
 const sheetCanvas = document.createElement('canvas');
 let sheetImage = null;
 
+/** One recipe's sprites and sheet image. Pure apart from the clock. */
+function buildSheet(r){
+  const n = r.seeds.length, list = new Array(n);
+  for (let i = 0; i < n; i++){
+    const c = cellSettings(r, i);
+    list[i] = generateSprite(c.seed, c.gen, paletteFor(c.paletteSeed, c.gen.bpc));
+  }
+  const { cols, rows, spacing, scale } = r.sheet, { w, h } = r.gen;
+  const image = rasterizeSheet(list.map((sprite, i) => ({ sprite, col: i % cols, row: (i / cols) | 0 })),
+                               { cols, rows, cellW: w, cellH: h, spacing }, { scale });
+  return { sprites: list, image };
+}
+
 function render(){
   const t0 = performance.now();
-  const n = recipe.seeds.length;
-  sprites = new Array(n);
-  for (let i = 0; i < n; i++){
-    const c = cellSettings(recipe, i);
-    sprites[i] = generateSprite(c.seed, c.gen, paletteFor(c.paletteSeed, c.gen.bpc));
-  }
-  const { cols, rows, spacing, scale } = recipe.sheet, { w, h } = recipe.gen;
-  sheetImage = rasterizeSheet(sprites.map((sprite, i) => ({ sprite, col: i % cols, row: (i / cols) | 0 })),
-                              { cols, rows, cellW: w, cellH: h, spacing }, { scale });
+  ({ sprites, image: sheetImage } = buildSheet(recipe));
   imageToCanvas(sheetImage, sheetCanvas);
+  const { cols, rows, spacing, scale } = recipe.sheet, { w, h } = recipe.gen;
   view.setImage(sheetCanvas, { cols, rows, outerW: (w + spacing) * scale, outerH: (h + spacing) * scale,
                                offX: 0, offY: 0, spriteW: w * scale, spriteH: h * scale });
-  if (selected >= n) selected = -1;
+  if (selected >= sprites.length) selected = -1;
   view.setSelection(selected);
   controls.update(recipe);
   showInspector();
@@ -87,17 +100,85 @@ function writeHash(){
   }, 250);
 }
 
+/* -------------------------------------------------------------- timeline */
+let playTimer = 0;
+const showTimeline = () => timelineView.refresh(tl, { playing: !!playTimer });
+const liveOpts = () => ({ hash: averageHash(sheetImage) });
+
+/* Record the live recipe (it is already rendered, so the sheet canvas is
+   its picture). With REC off this only marks the recipe as unrecorded. */
+function record(kind, label){
+  const entry = commit(tl, recipe, { kind, label, ...liveOpts() });
+  if (entry) timelineView.thumb(entry, sheetCanvas);
+  showTimeline();
+}
+/** Every change to the live recipe comes through here. */
+function apply(next, kind, label){
+  note = null;
+  recipe = next;
+  render();
+  record(kind, label);
+}
+
+/* Show the entry at the playhead, unless the live recipe is already it. */
+function showPlayhead(){
+  const r = tl.entries[tl.playhead].recipe;
+  if (r !== recipe){ recipe = r; note = null; render(); }
+  showTimeline();
+}
+function jump(i){
+  if (goTo(tl, i)) showPlayhead();
+}
+function togglePlay(){
+  if (playTimer){ clearInterval(playTimer); playTimer = 0; return showTimeline(); }
+  if (tl.entries.length < 2) return;
+  if (tl.playhead >= tl.entries.length - 1) jump(0);
+  playTimer = setInterval(() => {
+    if (tl.playhead >= tl.entries.length - 1) togglePlay(); else jump(tl.playhead + 1);
+  }, 340);
+  showTimeline();
+}
+function mark(){
+  const entry = markKeyframe(tl, recipe, liveOpts());
+  if (entry) timelineView.thumb(entry, sheetCanvas);
+  showTimeline();
+}
+/* Removing entries keeps the live recipe, unless the entry it came from went. */
+function removed(before){
+  if (tl.entries[tl.playhead] !== before){ tl.dirty = false; showPlayhead(); } else showTimeline();
+}
+
+const timelineView = mountTimelineView($('timeline'), {
+  onGoTo: jump,
+  onPlay: togglePlay,
+  onDelete(i){ const before = tl.entries[tl.playhead]; if (deleteEntry(tl, i)) removed(before); },
+  onRec(){
+    const entry = setRecording(tl, !tl.recording, recipe, liveOpts());
+    if (entry) timelineView.thumb(entry, sheetCanvas);
+    showTimeline();
+  },
+  onMark: mark,
+  onKeysOnly(){ tl.keysOnly = !tl.keysOnly; showTimeline(); },
+  onPrune(threshold){
+    const before = tl.entries[tl.playhead];
+    const n = dropEntries(tl, prunePlan(tl, threshold));
+    say(`removed ${n} near-duplicate entr${n === 1 ? 'y' : 'ies'} at similarity ${threshold}; ${tl.entries.length} left`);
+    setStatus(0);
+    removed(before);
+  },
+});
+
 /* --------------------------------------------------------------- actions */
 function change(part, key, value){
-  note = null;
+  let next;
   if (part === 'sheet' && (key === 'cols' || key === 'rows')){
     const cols = key === 'cols' ? value : recipe.sheet.cols, rows = key === 'rows' ? value : recipe.sheet.rows;
     const n = normalize({ ...recipe, sheet: { ...recipe.sheet, cols, rows } }).sheet;   // clamp first
-    recipe = normalize(resizeSheet(recipe, n.cols, n.rows, randomU32));
+    next = normalize(resizeSheet(recipe, n.cols, n.rows, randomU32));
   } else {
-    recipe = normalize({ ...recipe, [part]: { ...recipe[part], [key]: value } });
+    next = normalize({ ...recipe, [part]: { ...recipe[part], [key]: value } });
   }
-  render();
+  apply(next, `set:${part}.${key}`);
 }
 
 async function copyText(text, what){
@@ -107,20 +188,31 @@ async function copyText(text, what){
 }
 
 const ACTIONS = {
-  'regenerate'(){ note = null; recipe = { ...recipe, seeds: recipe.seeds.map(randomU32) }; render(); },
-  'new-palette'(){ note = null; recipe = { ...recipe, paletteSeed: randomU32() }; render(); },
+  'regenerate'(){ apply({ ...recipe, seeds: recipe.seeds.map(randomU32) }, 'regenerate', 'new seeds'); },
+  'new-palette'(){ apply({ ...recipe, paletteSeed: randomU32() }, 'palette', 'new palette'); },
   'copy-link'(){ lastHash = encode(recipe); history.replaceState(null, '', lastHash); copyText(location.href, 'Link'); },
   'export-sheet'(){ downloadPNG(sheetImage, `spritesnow-sheet-${recipe.sheet.cols}x${recipe.sheet.rows}.png`); },
 };
 
+/* An old session's whole timeline is added after the current entries
+   (nothing is replaced), with the playhead on the entry the user saved at. */
 async function importFile(file){
   try {
-    const { recipes, playhead, notes } = importSession(await file.text());
-    recipe = recipes[playhead];
+    const { entries, playhead, notes } = importSession(await file.text());
+    // one sheet at a time: keep its hash and a thumbnail, not the image
+    const scratch = document.createElement('canvas');
+    const list = entries.map(e => {
+      const { image } = buildSheet(e.recipe);
+      return { ...e, hash: averageHash(image), thumb: timelineView.makeThumb(imageToCanvas(image, scratch)) };
+    });
+    appendEntries(tl, list, playhead).forEach((entry, k) => timelineView.setThumb(entry, list[k].thumb));
+    recipe = tl.entries[tl.playhead].recipe;
     selected = -1;
-    say(`Imported ${file.name}: timeline entry ${playhead + 1} of ${recipes.length}, using the old fold (v1)` +
+    say(`Imported ${file.name}: added its ${entries.length} timeline entr${entries.length === 1 ? 'y' : 'ies'}, ` +
+        `showing the one it was saved at (its #${playhead + 1}), with the old fold (v1)` +
         (notes.length ? ` · ${notes.join(' · ')}` : ''), notes.length ? 'warn' : '');
     render();
+    showTimeline();
   } catch (err){
     say(`Could not import ${file.name}: ${err.message}`, 'bad');
     setStatus(0);
@@ -149,12 +241,24 @@ $('fit').addEventListener('click', () => view.fit());
 $('zoom-in').addEventListener('click', () => view.zoom(1.25));
 $('zoom-out').addEventListener('click', () => view.zoom(0.8));
 
+const KEYS = {
+  r: () => ACTIONS.regenerate(),
+  f: () => view.fit(),
+  '+': () => view.zoom(1.25), '=': () => view.zoom(1.25), '-': () => view.zoom(0.8),
+  ArrowLeft: () => jump(tl.playhead - 1), ArrowRight: () => jump(tl.playhead + 1),
+  Home: () => jump(0), End: () => jump(tl.entries.length - 1),
+  ' ': togglePlay,
+  b: mark,
+  Delete: () => { const before = tl.entries[tl.playhead]; if (deleteEntry(tl, tl.playhead)) removed(before); },
+};
+KEYS.Backspace = KEYS.Delete;
 window.addEventListener('keydown', e => {
   if (e.target.closest('input, select, textarea') || e.metaKey || e.ctrlKey || e.altKey) return;
-  if (e.key === 'r' || e.key === 'R') ACTIONS.regenerate();
-  else if (e.key === 'f' || e.key === 'F') view.fit();
-  else if (e.key === '+' || e.key === '=') view.zoom(1.25);
-  else if (e.key === '-') view.zoom(0.8);
+  if (e.key === ' ' && e.target.closest('button')) return;      // Space presses a focused button
+  const fn = KEYS[e.key.length === 1 ? e.key.toLowerCase() : e.key];
+  if (!fn) return;
+  e.preventDefault();
+  fn();
 });
 
 function loadFromHash(){
@@ -166,8 +270,9 @@ function loadFromHash(){
 }
 window.addEventListener('hashchange', () => {
   if (location.hash === lastHash) return;
-  if (loadFromHash()){ selected = -1; render(); }
+  if (loadFromHash()){ selected = -1; apply(recipe, 'link', 'opened a link'); }
 });
 
 if (!loadFromHash()) recipe = freshRecipe();
 render();
+record('start', 'session start');
