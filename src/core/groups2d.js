@@ -19,7 +19,7 @@
               lexicographic minimum (row, then column). Default for new recipes.
    Measured facts this must reproduce: docs/from3Dto2D.md §3. */
 
-const todo = name => { throw new Error(`not implemented: groups2d.${name} (M1)`); };
+const todo = name => { throw new Error(`not implemented: groups2d.${name} (M1b)`); };
 
 export const ELEMENT_COUNT = 8;
 
@@ -55,11 +55,72 @@ export function groupById(id){ return todo('groupById'); }
  *  @returns {{ els:number[], order:number, id:string, reduced:boolean }} */
 export function effectiveGroup(id, w, h){ return todo('effectiveGroup'); }
 
-/** Orbit table for one (group, w, h, fold).
- *  @returns {{ rep:Int32Array,         // flat index of each cell's representative
- *              orbitIndex:Uint8Array,  // which element carries the cell to its rep
- *              orbitCount:number }} */
-export function orbitTable(id, w, h, fold){ return todo('orbitTable'); }
+/* ------------------------------------------------------------- the seed region
+   Generation evaluates the field, the noise and the masks over a rectangle
+   of "seed" cells, in row-major order, because the RNG is consumed in that
+   order. Symmetry is then a lookup: every output cell names one seed cell.
+   That keeps old sprites byte-identical however the lookup is computed:
+     fold:1  the lookup is the old fold() switch, defects included
+     fold:2  (M1b) each orbit's representative, chosen inside the same
+             rectangle: the old choice where it was correct. */
+
+/** Size of the seed region for a legacy mode. Ported verbatim from reference
+ *  `seedDims`. @returns {[number, number]} [sw, sh] */
+export function seedDims(w,h,mode){
+  const hw = Math.ceil(w/2), hh = Math.ceil(h/2);
+  switch(mode){
+    case 'horizontal': return [hw,h];
+    case 'vertical':   return [w,hh];
+    case 'rot180':     return [w,hh];
+    case 'quadrant': case 'diagonal': case 'rot90': return [hw,hh];
+    default: return [w,h];
+  }
+}
+
+/** The old fold, ported verbatim from reference `fold`, defects included
+ *  (docs/from3Dto2D.md §3). Only fold:1 uses it.
+ *  @returns {[number, number]} the seed cell for output cell (x, y) */
+export function legacyFold(x,y,w,h,mode){
+  const hw = Math.ceil(w/2), hh = Math.ceil(h/2);
+  let sx=x, sy=y;
+  switch(mode){
+    case 'horizontal': if(sx>=hw) sx=w-1-sx; break;
+    case 'vertical':   if(sy>=hh) sy=h-1-sy; break;
+    case 'quadrant':   if(sx>=hw) sx=w-1-sx; if(sy>=hh) sy=h-1-sy; break;
+    case 'rot180':     if(sy>=hh){ sy=h-1-sy; sx=w-1-sx; } break;
+    case 'diagonal': {
+      if(sx>=hw) sx=w-1-sx; if(sy>=hh) sy=h-1-sy;
+      if(hw===hh && sx>sy){ const t=sx; sx=sy; sy=t; }
+      break;
+    }
+    case 'rot90': {
+      if(w!==h){ if(sx>=hw) sx=w-1-sx; if(sy>=hh) sy=h-1-sy; break; }
+      let g=0;
+      while((sx>=hw || sy>=hh) && g++<4){ const nx=h-1-sy, ny=sx; sx=nx; sy=ny; }
+      break;
+    }
+  }
+  return [sx,sy];
+}
+
+/** The cell -> seed-cell lookup for one (group, w, h, fold).
+ *  M1b adds orbitIndex (which element carries each cell to its
+ *  representative) and orbitCount.
+ *  @returns {{ sw:number, sh:number,
+ *              rep:Int32Array }}   // per output cell (y*w + x): seed cell sy*sw + sx */
+export function orbitTable(id, w, h, fold){
+  const g = SUBGROUPS.find(s => s.id === id);
+  if (!g) throw new Error(`unknown symmetry group: ${id}`);
+  if (fold !== 1) return todo('orbitTable with fold:2');
+  if (!g.legacy) throw new Error(`fold:1 reproduces the old app, which had no ${id} symmetry`);
+  const [sw, sh] = seedDims(w, h, g.legacy);
+  const rep = new Int32Array(w * h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++){
+    const [sx, sy] = legacyFold(x, y, w, h, g.legacy);
+    rep[y*w + x] = (sx >= 0 && sx < sw && sy >= 0 && sy < sh) ? sy*sw + sx : -1;
+  }
+  return { sw, sh, rep };
+}
 
 /** How many of the 8 elements map a finished grid onto itself. Valid on
  *  square grids. On rectangles, count only the elements that fit the grid.
