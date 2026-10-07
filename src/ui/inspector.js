@@ -7,9 +7,10 @@ import { imageToCanvas } from '../raster/png.js';
 
 /**
  * @param {HTMLElement} root
- * @param {{ onCopyRecipe:() => void, onExport:() => void, onLock:() => void, onReroll:() => void }} handlers
+ * @param {{ onCopyRecipe:() => void, onExport:() => void, onLock:() => void, onReroll:() => void,
+ *           onKeep:() => void }} handlers
  */
-export function mountInspector(root, { onCopyRecipe, onExport, onLock, onReroll }){
+export function mountInspector(root, { onCopyRecipe, onExport, onLock, onReroll, onKeep }){
   root.innerHTML = '';
   const title = document.createElement('h1');
   title.textContent = 'Selected sprite';
@@ -70,7 +71,10 @@ export function mountInspector(root, { onCopyRecipe, onExport, onLock, onReroll 
       const reroll = document.createElement('button'); reroll.type = 'button'; reroll.textContent = 'Reroll';
       reroll.title = 'A new seed for this sprite only; also unlocks it (Shift+R, or Shift-click)';
       reroll.addEventListener('click', onReroll);
-      cells.append(lock, reroll);
+      const keep = document.createElement('button'); keep.type = 'button'; keep.textContent = '+ Keep';
+      keep.title = 'Add this sprite to the collection (K, or Alt-click)';
+      keep.addEventListener('click', onKeep);
+      cells.append(lock, reroll, keep);
 
       const bar = document.createElement('div');
       bar.className = 'buttons';

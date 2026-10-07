@@ -2,7 +2,7 @@
    Source format (reference save handler, "↓ Session"):
      { format:'sprite-gen-timeline', version:4 (or 3), playhead,
        cellPool: [ {rows, cols, list:[{seed, locked, lockCfg}]} ],
-       collection: [...kept items...],
+       collection: [ {id, name, seed, cfg (with cfg._paletteSeed), frame, from:[r,c], ts} ],
        entries: [ {key, label, ts, bookmark, cfg, paletteSeed, cells:<index into cellPool>} ] }
    A v1 entry instead carries `state` directly. Locked cells carry their own
    cfg (lockCfg, with lockCfg._paletteSeed), so each one becomes its own recipe.
@@ -37,11 +37,12 @@ export function genFromLegacyCfg(cfg){
 
 /** Read a session saved by the old app ("↓ Session").
  *  @param {string | object} json  the file's text, or the parsed object
- *  @returns {{ recipes:object[], entries:object[], playhead:number, notes:string[] }}
+ *  @returns {{ recipes:object[], entries:object[], playhead:number, collection:object[], notes:string[] }}
  *    one recipe per timeline entry, oldest first; `entries` adds each one's
  *    label, kind, time and keyframe flag (the old `bookmark`), for the
  *    timeline; `playhead` indexes the entry the user was looking at when
- *    they saved */
+ *    they saved; `collection` is the kept sprites, each as
+ *    { name, seed, gen, paletteSeed, entry, cell, ts } (workshop/collection.js) */
 export function importSession(json){
   const d = typeof json === 'string' ? JSON.parse(json) : json;
   if (!d || d.format !== 'sprite-gen-timeline')
@@ -58,7 +59,11 @@ export function importSession(json){
     ts: x.ts || 0, keyframe: !!x.bookmark,
   }));
   const playhead = Math.max(0, Math.min(d.playhead ?? recipes.length - 1, recipes.length - 1));
-  return { recipes, entries, playhead, notes: [...notes] };
+  const collection = (Array.isArray(d.collection) ? d.collection : []).map(it => ({
+    name: it.name, seed: it.seed, gen: normalizeGen(genFromLegacyCfg(it.cfg)), paletteSeed: it.cfg._paletteSeed,
+    entry: it.frame, cell: it.from, ts: it.ts,
+  }));
+  return { recipes, entries, playhead, collection, notes: [...notes] };
 }
 
 /* One timeline state -> one recipe. Locked cells carry their own cfg and

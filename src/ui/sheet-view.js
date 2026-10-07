@@ -5,8 +5,8 @@
 
 /**
  * @param {HTMLElement} root
- * @param {{ onSelect:(index:number, mods:{shift:boolean, mod:boolean}) => void }} handlers
- *        mod is ⌘ on a Mac, Ctrl elsewhere (either is accepted)
+ * @param {{ onSelect:(index:number, mods:{shift:boolean, mod:boolean, alt:boolean}) => void }} handlers
+ *        mod is ⌘ on a Mac, Ctrl elsewhere (either is accepted); alt is Option on a Mac
  */
 export function mountSheetView(root, { onSelect }){
   const canvas = document.createElement('canvas');
@@ -103,7 +103,7 @@ export function mountSheetView(root, { onSelect }){
     const c = Math.floor(sx / layout.outerW), rw = Math.floor(sy / layout.outerH);
     // a click on a cell selects it; a click anywhere else clears the selection
     onSelect(c >= 0 && c < layout.cols && rw >= 0 && rw < layout.rows ? rw * layout.cols + c : -1,
-             { shift: e.shiftKey, mod: e.metaKey || e.ctrlKey });
+             { shift: e.shiftKey, mod: e.metaKey || e.ctrlKey, alt: e.altKey });
   });
   // Ctrl-click on a Mac opens the context menu; on the sheet it locks instead
   root.addEventListener('contextmenu', e => { if (e.ctrlKey) e.preventDefault(); });

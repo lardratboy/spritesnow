@@ -53,3 +53,16 @@ export function rasterizeSolo(sprite, policy){
   return rasterizeSheet([{ sprite, col: 0, row: 0 }],
     { cols: 1, rows: 1, cellW: sprite.w, cellH: sprite.h, spacing: 0 }, policy);
 }
+
+/** Several sprites of any sizes on one sheet, `cols` across, filled row by
+ *  row. Cells are sized to the largest sprite so mixed sizes still align to
+ *  a regular grid (the old app's collection export).
+ *  @param {object[]} sprites
+ *  @param {{cols:number, spacing:number}} layout
+ *  @returns {Image} */
+export function rasterizePacked(sprites, { cols, spacing }, policy){
+  if (!sprites.length) throw new Error('nothing to pack');
+  const cellW = Math.max(...sprites.map(s => s.w)), cellH = Math.max(...sprites.map(s => s.h));
+  return rasterizeSheet(sprites.map((sprite, i) => ({ sprite, col: i % cols, row: (i / cols) | 0 })),
+    { cols, rows: Math.ceil(sprites.length / cols), cellW, cellH, spacing }, policy);
+}

@@ -56,10 +56,10 @@ const SECTIONS = [
  * @param {HTMLElement} root
  * @param {{ onChange:(part:string, key:string, value:any) => void,
  *           onAction:(name:string) => void,
- *           onImport:(file:File) => void }} handlers
+ *           onLoad:(file:File) => void }} handlers
  * @returns {{ update:(recipe:object) => void }}
  */
-export function mountControls(root, { onChange, onAction, onImport }){
+export function mountControls(root, { onChange, onAction, onLoad }){
   const inputs = [];   // { row, part, el, readout }
 
   for (const section of SECTIONS){
@@ -122,17 +122,20 @@ export function mountControls(root, { onChange, onAction, onImport }){
   actions.append(el('div', 'title', 'Actions'));
   const bar = el('div', 'buttons');
   const file = el('input'); file.type = 'file'; file.accept = 'application/json,.json'; file.className = 'hidden';
-  file.addEventListener('change', () => { if (file.files[0]) onImport(file.files[0]); file.value = ''; });
+  file.addEventListener('change', () => { if (file.files[0]) onLoad(file.files[0]); file.value = ''; });
   bar.append(
     button('Regenerate', () => onAction('regenerate'), 'primary', 'New seeds for every unlocked cell (R)'),
     button('Copy link', () => onAction('copy-link'), null, 'The link is the recipe: it rebuilds this exact sheet'),
     button('↓ Sheet PNG', () => onAction('export-sheet'), null, 'Transparent PNG at the sheet scale'),
-    button('↑ Old session', () => file.click(), null, 'Load a session saved by the old sprite generator'),
+    button('↓ Save session', () => onAction('save-session'), null, 'Save the timeline and the collection as one file'),
+    button('↑ Load session', () => file.click(), null,
+           'Open a saved session, from spritesnow or the old sprite generator. It replaces the current timeline and collection'),
   );
   actions.append(bar, file);
   actions.append(el('div', 'hint', 'Click a sprite to inspect it. Drag to pan, scroll to zoom. R regenerates, F fits. ' +
     '← → step through the timeline, Space replays it, B makes a keyframe. ' +
-    'L locks the selected sprite, Shift+R rerolls it (or ⌘/Ctrl-click, Shift-click).'));
+    'L locks the selected sprite, Shift+R rerolls it, K keeps it in the collection ' +
+    '(or ⌘/Ctrl-click, Shift-click, Alt-click).'));
   root.append(actions);
 
   const note = root.querySelector('#symmetry-note');

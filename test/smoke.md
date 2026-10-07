@@ -1,4 +1,4 @@
-# Browser smoke test (M2, M3a, M3b)
+# Browser smoke test (M2, M3a, M3b, M3c)
 
 What to check by hand after a change to the UI. About five minutes.
 
@@ -25,7 +25,7 @@ then open <http://localhost:8000/>.
    "New palette": same shapes, new colours.
 7. **Permalink.** Click "Copy link", open a new tab and paste. You get the
    exact same sheet.
-8. **Old session.** Click "↑ Old session" and choose a `sprite_session.json`
+8. **Old session.** Click "↑ Load session" and choose a `sprite_session.json`
    saved by `symmetrical_sprite_generator.html`. The sheet should match what
    the old app showed at its playhead. Fold reads "Old app, exact (v1)", and a
    fractional scale is reported as rounded.
@@ -63,9 +63,10 @@ rebuilds exactly what was on screen then.
 16. **Delete and replay.** Hover a thumbnail and click its ✕, or press
     **Delete** to remove the current entry. Press **Space** to replay the
     timeline from the start; it stops at the end.
-17. **Old session timeline.** "↑ Old session" now adds the old session's
-    whole timeline after your entries (bookmarks become keyframes), and
-    shows the entry it was saved at.
+17. **Old session timeline.** "↑ Load session" with an old session loads
+    its whole timeline (bookmarks become keyframes) and shows the entry it
+    was saved at. Since M3c it replaces the current timeline, as loading
+    any session does (step 30).
 
 ## Lock and reroll (M3b)
 
@@ -86,3 +87,40 @@ rebuilds exactly what was on screen then.
 23. **Locks are saved.** Copy the link and open it in a new tab: the same
     sprites are locked. Exported PNGs never show the red outlines.
 
+## Collection and sessions (M3c)
+
+The collection is a shelf of kept sprites under the inspector. It sits
+outside the timeline: scrubbing never removes a kept sprite.
+
+24. **Keep.** Click a sprite and press **K** (or "+ Keep" in the
+    inspector, or Alt-click / Option-click the sprite). It appears under
+    "Collection" with a name like "trefoil·17", its size, the timeline
+    entry it came from and its seed. Keep the same kind of sprite twice:
+    the second is named "… (2)".
+25. **Kept means kept.** Change Symmetry, click "New palette" and press
+    **R**. The sheet changes; the kept thumbnails do not. Lock a sprite
+    and keep it: it is kept with the settings it was locked with.
+26. **Rename and reorder.** Click a name, type a new one, press Enter.
+    Drag a row above another: a blue line shows where it will land. With
+    the cursor in a name, **Alt+↑ / Alt+↓** moves that row.
+27. **Restore.** Click ⟲ on a kept sprite. The sheet takes that sprite's
+    settings, the first cell shows exactly that sprite (selected), the
+    sheet keeps its size, and the timeline adds "restore …".
+28. **Export.** ↓ on a row downloads that sprite as a PNG at the sheet
+    scale, named after it. "↓ Sheet" in the Collection header downloads
+    every kept sprite on one packed, about-square sheet. ⧉ copies the
+    sprite's recipe, and ✕ removes it.
+29. **Save.** Turn REC off and move a slider, so the label says
+    "● unrecorded". Click "↓ Save session": a
+    `spritesnow-session-<date>.json` downloads, and the status line says
+    what it saved, including the unrecorded sheet.
+30. **Load.** Reload the page (the timeline and collection are empty
+    again), then "↑ Load session" with that file. Everything comes back:
+    every timeline entry with its keyframes and branches, REC off, the
+    unrecorded sheet still marked unrecorded, and the collection with its
+    names and order. With work on screen, loading first asks before
+    replacing it; Cancel changes nothing.
+31. **Old sessions bring their collection.** Load an old
+    `sprite_session.json` that had kept sprites: they appear in the
+    collection, looking as they did in the old app. A file that is not a
+    session gives a red message in the status line and changes nothing.

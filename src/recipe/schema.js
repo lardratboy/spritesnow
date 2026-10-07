@@ -139,6 +139,12 @@ export function cellSettings(recipe, i){
   return { seed: recipe.seeds[i], gen: o ? o.gen : recipe.gen, paletteSeed: o ? o.paletteSeed : recipe.paletteSeed };
 }
 
+/** One cell as a 1×1 recipe of its own, for "Copy recipe".
+ *  @param {{seed, gen, paletteSeed}} cell  as cellSettings() returns it */
+export function soloRecipe({ seed, gen, paletteSeed }, sheet){
+  return normalize({ gen, sheet: { ...sheet, cols: 1, rows: 1 }, paletteSeed, seeds: [seed] });
+}
+
 /** Resize the sheet, keeping each surviving cell at its (row, col), as the
  *  old app's reconcileCells did. New cells get seeds from newSeed(i). */
 export function resizeSheet(recipe, cols, rows, newSeed){

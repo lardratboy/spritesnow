@@ -1,6 +1,6 @@
 /* PNG export (browser only). Puts a rasterised Image on a canvas and
    downloads it. The pixels are exactly the rasteriser's: no smoothing,
-   no overlays. */
+   no overlays. downloadBlob also saves session files. */
 
 /** @param {{width:number, height:number, data:Uint8ClampedArray}} image */
 export function imageToCanvas(image, canvas = document.createElement('canvas')){
@@ -10,11 +10,14 @@ export function imageToCanvas(image, canvas = document.createElement('canvas')){
 }
 
 export function downloadPNG(image, filename){
-  imageToCanvas(image).toBlob(blob => {
-    const a = document.createElement('a');
-    a.download = filename;
-    a.href = URL.createObjectURL(blob);
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-  }, 'image/png');
+  imageToCanvas(image).toBlob(blob => downloadBlob(blob, filename), 'image/png');
+}
+
+/** Save any Blob (a PNG, a session file) through the browser's downloads. */
+export function downloadBlob(blob, filename){
+  const a = document.createElement('a');
+  a.download = filename;
+  a.href = URL.createObjectURL(blob);
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }

@@ -206,15 +206,22 @@ export function appendEntries(tl, list, playhead){
   tl.entries.push(...created);
   tl.playhead = at + Math.max(0, Math.min(playhead ?? list.length - 1, list.length - 1));
   tl.dirty = false;
-  const excess = tl.entries.length - MAX_ENTRIES;
-  if (excess > 0){
-    const drop = new Set();
-    for (let i = 0; i < tl.entries.length && drop.size < excess; i++)
-      if (!tl.entries[i].keyframe && i !== tl.playhead) drop.add(i);
-    for (let i = 0; drop.size < excess; i++) if (i !== tl.playhead) drop.add(i);   // keyframes only: oldest go
-    dropEntries(tl, drop);
-  }
+  trimToCap(tl);
   return created;
+}
+
+/** Enforce MAX_ENTRIES on a log that grew in one go (an import or a loaded
+ *  file): the oldest entries that are neither keyframes nor the playhead
+ *  go first; only if that is not enough, the oldest keyframes.
+ *  @returns {number} how many were removed */
+export function trimToCap(tl){
+  const excess = tl.entries.length - MAX_ENTRIES;
+  if (excess <= 0) return 0;
+  const drop = new Set();
+  for (let i = 0; i < tl.entries.length && drop.size < excess; i++)
+    if (!tl.entries[i].keyframe && i !== tl.playhead) drop.add(i);
+  for (let i = 0; drop.size < excess; i++) if (i !== tl.playhead) drop.add(i);   // keyframes only: oldest go
+  return dropEntries(tl, drop);
 }
 
 /** The entries the strip shows: all, or only keyframes plus the playhead. */

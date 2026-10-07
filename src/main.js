@@ -4,23 +4,27 @@
    rebuilds the same sheet. Randomness for NEW seeds lives here, in the UI;
    src/core/ never calls Math.random.
    The timeline (workshop/timeline.js) records the recipe after every
-   change, so any entry replays exactly what was on screen. */
-import { normalize, cellSettings, resizeSheet } from './recipe/schema.js';
+   change, so any entry replays exactly what was on screen. The collection
+   (workshop/collection.js) sits outside the timeline, and a session file
+   (workshop/session.js) saves both. */
+import { normalize, cellSettings, resizeSheet, soloRecipe } from './recipe/schema.js';
 import { encode, decode } from './recipe/permalink.js';
-import { importSession } from './recipe/import-v4.js';
 import { generateSprite } from './core/generate.js';
 import { paletteFor } from './core/palette.js';
 import { aut } from './core/groups2d.js';
-import { rasterizeSheet, rasterizeSolo } from './raster/rasterize.js';
-import { imageToCanvas, downloadPNG } from './raster/png.js';
-import { createTimeline, commit, goTo, deleteEntry, dropEntries, prunePlan, markKeyframe, setRecording,
-         appendEntries } from './workshop/timeline.js';
+import { rasterizeSheet, rasterizeSolo, rasterizePacked } from './raster/rasterize.js';
+import { imageToCanvas, downloadPNG, downloadBlob } from './raster/png.js';
+import { createTimeline, commit, goTo, deleteEntry, dropEntries, prunePlan, markKeyframe,
+         setRecording } from './workshop/timeline.js';
 import { averageHash } from './workshop/frame-hash.js';
 import { isLocked, toggleLock, rerollCell, reseedUnlocked, lockedDifferences } from './workshop/cells.js';
+import { keep, rename, remove, move, restore, packGrid } from './workshop/collection.js';
+import { saveSession, readSession } from './workshop/session.js';
 import { mountControls } from './ui/controls.js';
 import { mountSheetView } from './ui/sheet-view.js';
 import { mountInspector } from './ui/inspector.js';
 import { mountTimelineView } from './ui/timeline-view.js';
+import { mountCollectionView } from './ui/collection-view.js';
 
 const $ = id => document.getElementById(id);
 const randomU32 = () => crypto.getRandomValues(new Uint32Array(1))[0];
@@ -34,6 +38,7 @@ let sprites = [];
 let selected = -1;
 let note = null;              // { text, cls } shown in the status line until the next action
 const tl = createTimeline();
+let items = [];               // the collection
 
 /* ---------------------------------------------------------------- render */
 const sheetCanvas = document.createElement('canvas');
@@ -197,69 +202,122 @@ const ACTIONS = {
   'new-palette'(){ apply({ ...recipe, paletteSeed: randomU32() }, 'palette', 'new palette'); },
   'copy-link'(){ lastHash = encode(recipe); history.replaceState(null, '', lastHash); copyText(location.href, 'Link'); },
   'export-sheet'(){ downloadPNG(sheetImage, `spritesnow-sheet-${recipe.sheet.cols}x${recipe.sheet.rows}.png`); },
+  'save-session': () => saveFile(),
 };
 
-/* Cell actions. Each one is a timeline entry. */
+/* Cell actions. Lock and reroll are timeline entries; keeping a sprite
+   changes only the collection, which sits outside the timeline. */
 const CELL = {
   lock(i){ apply(toggleLock(recipe, i), 'lock', `${isLocked(recipe, i) ? 'unlock' : 'lock'} #${i + 1}`); },
   reroll(i){ apply(rerollCell(recipe, i, randomU32()), 'reroll', `reroll #${i + 1}`); },
+  keep(i){
+    const out = keep(items, recipe, i, { recipeText: sprites[i].recipeText, entry: tl.playhead + 1, now: Date.now() });
+    items = out.items;
+    showCollection(out.item.id);
+    say(`kept #${i + 1} as "${out.item.name}"`); setStatus(0);
+  },
 };
 function onSelected(action){
   if (selected >= 0) return CELL[action](selected);
   say('select a sprite first'); setStatus(0);
 }
-function select(i, { shift = false, mod = false } = {}){
+function select(i, { shift = false, mod = false, alt = false } = {}){
   selected = i;
   if (i >= 0 && shift) return CELL.reroll(i);
   if (i >= 0 && mod) return CELL.lock(i);
   view.setSelection(i);
   showInspector();
+  if (i >= 0 && alt) CELL.keep(i);
 }
 
-/* An old session's whole timeline is added after the current entries
-   (nothing is replaced), with the playhead on the entry the user saved at. */
-async function importFile(file){
-  try {
-    const { entries, playhead, notes } = importSession(await file.text());
-    // one sheet at a time: keep its hash and a thumbnail, not the image
-    const scratch = document.createElement('canvas');
-    const list = entries.map(e => {
-      const { image } = buildSheet(e.recipe);
-      return { ...e, hash: averageHash(image), thumb: timelineView.makeThumb(imageToCanvas(image, scratch)) };
-    });
-    appendEntries(tl, list, playhead).forEach((entry, k) => timelineView.setThumb(entry, list[k].thumb));
-    recipe = tl.entries[tl.playhead].recipe;
-    selected = -1;
-    say(`Imported ${file.name}: added its ${entries.length} timeline entr${entries.length === 1 ? 'y' : 'ies'}, ` +
-        `showing the one it was saved at (its #${playhead + 1}), with the old fold (v1)` +
-        (notes.length ? ` · ${notes.join(' · ')}` : ''), notes.length ? 'warn' : '');
-    render();
-    showTimeline();
-  } catch (err){
-    say(`Could not import ${file.name}: ${err.message}`, 'bad');
-    setStatus(0);
+/* ------------------------------------------------------------ collection */
+const itemSprite = it => generateSprite(it.seed, it.gen, paletteFor(it.paletteSeed, it.gen.bpc));
+const itemById = id => items.find(i => i.id === id);
+const safeName = n => n.replace(/[^a-z0-9._-]+/gi, '_').replace(/^_+|_+$/g, '') || 'sprite';
+const showCollection = reveal => collectionView.render(items, reveal);
+const collectionView = mountCollectionView($('collection'), {
+  spriteFor: itemSprite,
+  onRestore(id){
+    const it = itemById(id);
+    selected = 0;
+    apply(restore(recipe, it), 'restore', `restore "${it.name}"`);
+  },
+  onCopy(id){ copyText(JSON.stringify(soloRecipe(itemById(id), recipe.sheet), null, 2), 'Recipe'); },
+  onExport(id){
+    const it = itemById(id);
+    downloadPNG(rasterizeSolo(itemSprite(it), { scale: recipe.sheet.scale }), `${safeName(it.name)}.png`);
+  },
+  onRemove(id){ items = remove(items, id); showCollection(); },
+  onRename(id, name){ items = rename(items, id, name); showCollection(); },
+  onMove(from, to){ items = move(items, from, to); showCollection(); },
+  onExportSheet(){
+    if (!items.length) return;
+    const { cols, rows } = packGrid(items.length);
+    downloadPNG(rasterizePacked(items.map(itemSprite), { cols, spacing: recipe.sheet.spacing }, { scale: recipe.sheet.scale }),
+                `spritesnow-collection-${items.length}.png`);
+    say(`exported ${items.length} kept sprite${items.length === 1 ? '' : 's'} as a ${cols}×${rows} sheet`); setStatus(0);
+  },
+});
+
+/* --------------------------------------------------------------- sessions */
+function saveFile(){
+  const data = saveSession(tl, items, recipe);
+  const d = new Date(), pad = n => String(n).padStart(2, '0');
+  const name = `spritesnow-session-${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}.json`;
+  downloadBlob(new Blob([JSON.stringify(data)], { type: 'application/json' }), name);
+  say(`saved ${name}: ${tl.entries.length} timeline entries, ${items.length} kept sprite${items.length === 1 ? '' : 's'}` +
+      (data.live ? ', and the unrecorded sheet on screen' : ''));
+  setStatus(0);
+}
+
+/* Loading a session replaces the timeline and the collection, after asking
+   if there is work to lose. Old sessions load the same way, with the old
+   fold (v1). */
+async function loadFile(file){
+  let got;
+  try { got = readSession(await file.text()); }
+  catch (err){ say(`Could not load ${file.name}: ${err.message}`, 'bad'); return setStatus(0); }
+  if ((tl.entries.length > 1 || items.length) &&
+      !confirm(`Replace the current session (${tl.entries.length} timeline entries, ${items.length} kept sprites) ` +
+               `with ${file.name}?\n\nSave the current one first if you want to keep it.`)) return;
+  if (playTimer) togglePlay();
+  // one sheet at a time: keep its hash and a thumbnail, not the image
+  const scratch = document.createElement('canvas');
+  for (const e of got.tl.entries){
+    const { image } = buildSheet(e.recipe);
+    e.hash = averageHash(image);
+    timelineView.setThumb(e, timelineView.makeThumb(imageToCanvas(image, scratch)));
   }
+  Object.assign(tl, got.tl);
+  items = got.items;
+  recipe = got.live || tl.entries[tl.playhead].recipe;
+  selected = -1;
+  const n = tl.entries.length, k = items.length;
+  say(`Loaded ${file.name}${got.old ? ' (old app)' : ''}: ${n} timeline entr${n === 1 ? 'y' : 'ies'}, ` +
+      `${k} kept sprite${k === 1 ? '' : 's'}` + (got.live ? ', and the unrecorded sheet it was saved with' : '') +
+      (got.old ? ', with the old fold (v1)' : '') + (got.notes.length ? ` · ${got.notes.join(' · ')}` : ''),
+      got.notes.length ? 'warn' : '');
+  render();
+  showTimeline();
+  showCollection();
 }
 
 /* --------------------------------------------------------------- startup */
 const controls = mountControls($('controls'), {
   onChange: change,
   onAction: name => ACTIONS[name](),
-  onImport: importFile,
+  onLoad: loadFile,
 });
 const view = mountSheetView($('stage'), { onSelect: select });
 const inspector = mountInspector($('inspector'), {
-  onCopyRecipe(){
-    const c = cellSettings(recipe, selected);
-    const one = normalize({ gen: c.gen, sheet: { ...recipe.sheet, cols: 1, rows: 1 }, paletteSeed: c.paletteSeed, seeds: [c.seed] });
-    copyText(JSON.stringify(one, null, 2), 'Recipe');
-  },
+  onCopyRecipe(){ copyText(JSON.stringify(soloRecipe(cellSettings(recipe, selected), recipe.sheet), null, 2), 'Recipe'); },
   onExport(){
     const s = sprites[selected];
     downloadPNG(rasterizeSolo(s, { scale: recipe.sheet.scale }), `spritesnow-${recipe.seeds[selected].toString(16)}.png`);
   },
   onLock: () => onSelected('lock'),
   onReroll: () => onSelected('reroll'),
+  onKeep: () => onSelected('keep'),
 });
 $('fit').addEventListener('click', () => view.fit());
 $('zoom-in').addEventListener('click', () => view.zoom(1.25));
@@ -269,6 +327,7 @@ const KEYS = {
   r: () => ACTIONS.regenerate(),
   'Shift+r': () => onSelected('reroll'),
   l: () => onSelected('lock'),
+  k: () => onSelected('keep'),
   Escape: () => select(-1),
   f: () => view.fit(),
   '+': () => view.zoom(1.25), '=': () => view.zoom(1.25), '-': () => view.zoom(0.8),
@@ -304,3 +363,4 @@ window.addEventListener('hashchange', () => {
 if (!loadFromHash()) recipe = freshRecipe();
 render();
 record('start', 'session start');
+showCollection();

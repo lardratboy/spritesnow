@@ -18,11 +18,13 @@ h1{ font-size:15px; margin:0 0 10px; letter-spacing:.02em }
 button, input, select, textarea{ font:inherit; color:inherit }
 
 /* ------------------------------------------------------------ side panels */
-#controls, #inspector{
+#controls, #side{
   background:var(--panel); padding:12px; overflow-y:auto; display:flex; flex-direction:column; gap:10px;
 }
 #controls{ width:310px; flex:0 0 310px; border-right:1px solid var(--line) }
-#inspector{ width:270px; flex:0 0 270px; border-left:1px solid var(--line) }
+#side{ width:270px; flex:0 0 270px; border-left:1px solid var(--line); gap:14px }
+#inspector, #collection{ display:flex; flex-direction:column; gap:10px }
+#collection{ border-top:1px solid var(--line); padding-top:12px }
 
 .group{ background:var(--raised); border:1px solid var(--line); border-radius:8px; padding:9px 10px }
 .group > .title{
@@ -122,10 +124,44 @@ button.primary{ background:var(--accent); border-color:var(--accent); color:#fff
 #inspector .locked{ color:var(--bad) }
 #inspector button.locked{ background:var(--bad); border-color:var(--bad); color:#fff }
 
+/* ------------------------------------------------------------- collection */
+.col-head{ display:flex; align-items:center; gap:8px }
+.col-head h1{ margin:0; flex:1 }
+.col-head .count{ font-weight:400; font-size:12px; color:var(--dim) }
+.col-head button:disabled{ opacity:.4; cursor:default }
+.col-list{ list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:6px }
+.col-list .item{
+  display:flex; gap:8px; align-items:center; padding:5px; border:1px solid var(--line); border-radius:6px;
+  background:var(--raised); cursor:grab;
+}
+.col-list .item.new{ animation:kept 1.2s ease-out }
+@keyframes kept{ from{ border-color:var(--accent); box-shadow:0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent) } }
+.col-list .item.dragging{ opacity:.4 }
+.col-list .item.drop-before{ box-shadow:0 -2px 0 var(--accent) }
+.col-list .item.drop-after{ box-shadow:0 2px 0 var(--accent) }
+.col-list .thumb{
+  flex:0 0 46px; height:46px; display:flex; align-items:center; justify-content:center;
+  background:var(--sunk); border-radius:4px; overflow:hidden;
+}
+.col-list .thumb canvas{ image-rendering:pixelated; display:block }
+.col-list .body{ flex:1; min-width:0; display:flex; flex-direction:column; gap:2px }
+.col-list .name{
+  min-width:0; background:transparent; border:1px solid transparent; border-radius:4px; padding:1px 4px; font-weight:600;
+}
+.col-list .name:hover, .col-list .name:focus{ border-color:var(--line); background:var(--sunk) }
+.col-list .meta{
+  padding:0 5px; font:11px/1.4 ui-monospace, monospace; color:var(--dim);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.col-list .acts{ display:flex; gap:4px; padding:0 4px }
+.col-list .acts button{ padding:1px 7px; font-size:12px }
+.col-list .acts button.del:hover{ border-color:var(--bad); color:var(--bad) }
+.col-list .col-empty{ padding:4px 2px }
+
 /* ----------------------------------------------------------------- narrow */
 @media (max-width: 900px){
   body{ flex-direction:column; overflow:auto }
-  #controls, #inspector{ width:auto; flex:none; border:0; border-bottom:1px solid var(--line); padding:12px 16px }
+  #controls, #side{ width:auto; flex:none; border:0; border-bottom:1px solid var(--line); padding:12px 16px; overflow:visible }
   #main{ flex:none; height:85vh }
   .tl-head{ flex-wrap:wrap }
   .tl-label{ flex-basis:100% }
