@@ -1,0 +1,13 @@
+{
+  "name": "spritesnow",
+  "version": "0.0.1",
+  "private": true,
+  "description": "2D procedural sprite generator with a pure, tested core and an explicit symmetry-group engine",
+  "type": "module",
+  "scripts": {
+    "serve": "python3 -m http.server 8000",
+    "test": "node --test test/*.test.js",
+    "golden": "node tools/make-golden.js",
+    "measure": "node tools/measurements/foldcheck.js && node tools/measurements/groups.js"
+  }
+}
