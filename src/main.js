@@ -16,6 +16,7 @@ import { imageToCanvas, downloadPNG } from './raster/png.js';
 import { createTimeline, commit, goTo, deleteEntry, dropEntries, prunePlan, markKeyframe, setRecording,
          appendEntries } from './workshop/timeline.js';
 import { averageHash } from './workshop/frame-hash.js';
+import { isLocked, toggleLock, rerollCell, reseedUnlocked, lockedDifferences } from './workshop/cells.js';
 import { mountControls } from './ui/controls.js';
 import { mountSheetView } from './ui/sheet-view.js';
 import { mountInspector } from './ui/inspector.js';
@@ -59,6 +60,7 @@ function render(){
   view.setImage(sheetCanvas, { cols, rows, outerW: (w + spacing) * scale, outerH: (h + spacing) * scale,
                                offX: 0, offY: 0, spriteW: w * scale, spriteH: h * scale });
   if (selected >= sprites.length) selected = -1;
+  view.setLocked(Object.keys(recipe.overrides).map(Number));
   view.setSelection(selected);
   controls.update(recipe);
   showInspector();
@@ -72,7 +74,7 @@ function showInspector(){
   inspector.show({
     index: selected, seed: c.seed, sprite, gen: c.gen, paletteSeed: c.paletteSeed,
     aut: aut(sprite.grid, sprite.w, sprite.h), image: rasterizeSolo(sprite, { scale: 1 }),
-    override: !!recipe.overrides[selected],
+    locked: isLocked(recipe, selected), differs: lockedDifferences(recipe, selected),
   });
 }
 
@@ -188,11 +190,31 @@ async function copyText(text, what){
 }
 
 const ACTIONS = {
-  'regenerate'(){ apply({ ...recipe, seeds: recipe.seeds.map(randomU32) }, 'regenerate', 'new seeds'); },
+  'regenerate'(){
+    const n = Object.keys(recipe.overrides).length;
+    apply(reseedUnlocked(recipe, randomU32), 'regenerate', n ? `new seeds, ${n} locked kept` : 'new seeds');
+  },
   'new-palette'(){ apply({ ...recipe, paletteSeed: randomU32() }, 'palette', 'new palette'); },
   'copy-link'(){ lastHash = encode(recipe); history.replaceState(null, '', lastHash); copyText(location.href, 'Link'); },
   'export-sheet'(){ downloadPNG(sheetImage, `spritesnow-sheet-${recipe.sheet.cols}x${recipe.sheet.rows}.png`); },
 };
+
+/* Cell actions. Each one is a timeline entry. */
+const CELL = {
+  lock(i){ apply(toggleLock(recipe, i), 'lock', `${isLocked(recipe, i) ? 'unlock' : 'lock'} #${i + 1}`); },
+  reroll(i){ apply(rerollCell(recipe, i, randomU32()), 'reroll', `reroll #${i + 1}`); },
+};
+function onSelected(action){
+  if (selected >= 0) return CELL[action](selected);
+  say('select a sprite first'); setStatus(0);
+}
+function select(i, { shift = false, mod = false } = {}){
+  selected = i;
+  if (i >= 0 && shift) return CELL.reroll(i);
+  if (i >= 0 && mod) return CELL.lock(i);
+  view.setSelection(i);
+  showInspector();
+}
 
 /* An old session's whole timeline is added after the current entries
    (nothing is replaced), with the playhead on the entry the user saved at. */
@@ -225,7 +247,7 @@ const controls = mountControls($('controls'), {
   onAction: name => ACTIONS[name](),
   onImport: importFile,
 });
-const view = mountSheetView($('stage'), { onSelect: i => { selected = i; view.setSelection(i); showInspector(); } });
+const view = mountSheetView($('stage'), { onSelect: select });
 const inspector = mountInspector($('inspector'), {
   onCopyRecipe(){
     const c = cellSettings(recipe, selected);
@@ -236,6 +258,8 @@ const inspector = mountInspector($('inspector'), {
     const s = sprites[selected];
     downloadPNG(rasterizeSolo(s, { scale: recipe.sheet.scale }), `spritesnow-${recipe.seeds[selected].toString(16)}.png`);
   },
+  onLock: () => onSelected('lock'),
+  onReroll: () => onSelected('reroll'),
 });
 $('fit').addEventListener('click', () => view.fit());
 $('zoom-in').addEventListener('click', () => view.zoom(1.25));
@@ -243,6 +267,9 @@ $('zoom-out').addEventListener('click', () => view.zoom(0.8));
 
 const KEYS = {
   r: () => ACTIONS.regenerate(),
+  'Shift+r': () => onSelected('reroll'),
+  l: () => onSelected('lock'),
+  Escape: () => select(-1),
   f: () => view.fit(),
   '+': () => view.zoom(1.25), '=': () => view.zoom(1.25), '-': () => view.zoom(0.8),
   ArrowLeft: () => jump(tl.playhead - 1), ArrowRight: () => jump(tl.playhead + 1),
@@ -255,7 +282,8 @@ KEYS.Backspace = KEYS.Delete;
 window.addEventListener('keydown', e => {
   if (e.target.closest('input, select, textarea') || e.metaKey || e.ctrlKey || e.altKey) return;
   if (e.key === ' ' && e.target.closest('button')) return;      // Space presses a focused button
-  const fn = KEYS[e.key.length === 1 ? e.key.toLowerCase() : e.key];
+  const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  const fn = (e.shiftKey && KEYS['Shift+' + key]) || KEYS[key];
   if (!fn) return;
   e.preventDefault();
   fn();

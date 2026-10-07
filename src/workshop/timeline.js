@@ -23,6 +23,7 @@
            or an action name ('regenerate', 'palette', 'start', …)
      hash  an 8×8 average hash of the sheet ([lo, hi]), for the pruner */
 import { hamming } from './frame-hash.js';
+import { SETTING_LABELS as LABELS } from '../recipe/schema.js';
 
 export const MAX_ENTRIES = 400;
 export const COALESCE_MS = 700;
@@ -31,15 +32,6 @@ export function createTimeline(){
   return { entries: [], playhead: -1, recording: true, dirty: false, keysOnly: false };
 }
 
-/* Context-free names for every setting, for entry labels. */
-const LABELS = {
-  'gen.source':'Source', 'gen.formula':'Formula', 'gen.expr':'Expression', 'gen.modulus':'Modulus',
-  'gen.stride':'Stride', 'gen.phase':'Phase', 'gen.coverage':'Coverage', 'gen.vary':'Vary per cell',
-  'gen.ca':'CA smooth', 'gen.mask':'Mask', 'gen.maskScale':'Mask size', 'gen.maskInvert':'Mask invert',
-  'gen.outline':'Outline', 'gen.w':'Width', 'gen.h':'Height', 'gen.symmetry':'Symmetry', 'gen.fold':'Fold',
-  'gen.bpc':'Gamut', 'gen.ncol':'Colours', 'gen.colorMode':'Colour mode', 'gen.sortLum':'Sort by luminance',
-  'sheet.cols':'Columns', 'sheet.rows':'Rows', 'sheet.spacing':'Spacing', 'sheet.scale':'Scale',
-};
 const FRACTIONAL = new Set(['gen.phase', 'gen.coverage', 'gen.maskScale']);
 
 /** Describe what changed between two recipes, as NG's diffLabel did. */

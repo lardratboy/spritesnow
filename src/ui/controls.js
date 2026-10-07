@@ -124,14 +124,15 @@ export function mountControls(root, { onChange, onAction, onImport }){
   const file = el('input'); file.type = 'file'; file.accept = 'application/json,.json'; file.className = 'hidden';
   file.addEventListener('change', () => { if (file.files[0]) onImport(file.files[0]); file.value = ''; });
   bar.append(
-    button('Regenerate', () => onAction('regenerate'), 'primary', 'New seeds for every cell (R)'),
+    button('Regenerate', () => onAction('regenerate'), 'primary', 'New seeds for every unlocked cell (R)'),
     button('Copy link', () => onAction('copy-link'), null, 'The link is the recipe: it rebuilds this exact sheet'),
     button('↓ Sheet PNG', () => onAction('export-sheet'), null, 'Transparent PNG at the sheet scale'),
     button('↑ Old session', () => file.click(), null, 'Load a session saved by the old sprite generator'),
   );
   actions.append(bar, file);
   actions.append(el('div', 'hint', 'Click a sprite to inspect it. Drag to pan, scroll to zoom. R regenerates, F fits. ' +
-    '← → step through the timeline, Space replays it, B makes a keyframe.'));
+    '← → step through the timeline, Space replays it, B makes a keyframe. ' +
+    'L locks the selected sprite, Shift+R rerolls it (or ⌘/Ctrl-click, Shift-click).'));
   root.append(actions);
 
   const note = root.querySelector('#symmetry-note');

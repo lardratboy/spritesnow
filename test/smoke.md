@@ -1,4 +1,4 @@
-# Browser smoke test (M2, M3a)
+# Browser smoke test (M2, M3a, M3b)
 
 What to check by hand after a change to the UI. About five minutes.
 
@@ -66,4 +66,23 @@ rebuilds exactly what was on screen then.
 17. **Old session timeline.** "↑ Old session" now adds the old session's
     whole timeline after your entries (bookmarks become keyframes), and
     shows the entry it was saved at.
+
+## Lock and reroll (M3b)
+
+18. **Lock.** Click a sprite, then press **L** (or the inspector's Lock
+    button, or ⌘-click / Ctrl-click the sprite). It gets a red outline
+    with a corner tab, and the timeline adds "lock #…".
+19. **Locked sprites stay put.** Change Symmetry, Gamut and click "New
+    palette". Every other sprite changes; the locked one does not. Select
+    it: the inspector says "keeps its own Symmetry, Gamut, Palette".
+20. **Regenerate around locks.** Press **R**: every unlocked sprite
+    changes, the locked ones stay, and the timeline label says how many
+    locked sprites were kept.
+21. **Reroll.** Shift-click a sprite (or select it and press **Shift+R**,
+    or the Reroll button). Only that sprite changes, and if it was locked
+    it is now unlocked.
+22. **Unlock.** Press **L** again on a locked sprite: it follows the sheet
+    settings again. **Esc** clears the selection.
+23. **Locks are saved.** Copy the link and open it in a new tab: the same
+    sprites are locked. Exported PNGs never show the red outlines.
 

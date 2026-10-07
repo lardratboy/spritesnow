@@ -7,9 +7,9 @@ import { imageToCanvas } from '../raster/png.js';
 
 /**
  * @param {HTMLElement} root
- * @param {{ onCopyRecipe:() => void, onExport:() => void }} handlers
+ * @param {{ onCopyRecipe:() => void, onExport:() => void, onLock:() => void, onReroll:() => void }} handlers
  */
-export function mountInspector(root, { onCopyRecipe, onExport }){
+export function mountInspector(root, { onCopyRecipe, onExport, onLock, onReroll }){
   root.innerHTML = '';
   const title = document.createElement('h1');
   title.textContent = 'Selected sprite';
@@ -18,7 +18,7 @@ export function mountInspector(root, { onCopyRecipe, onExport }){
   root.append(title, body);
 
   return {
-    /** @param {null | { index, seed, sprite, gen, paletteSeed, aut, image, override }} info */
+    /** @param {null | { index, seed, sprite, gen, paletteSeed, aut, image, locked, differs:string[] }} info */
     show(info){
       body.innerHTML = '';
       if (!info){
@@ -44,7 +44,10 @@ export function mountInspector(root, { onCopyRecipe, onExport }){
         const b = document.createElement('dd'); b.textContent = dd; if (cls) b.className = cls;
         dl.append(a, b);
       };
-      row('Cell', `#${info.index + 1}${info.override ? ' · own settings (locked in the old app)' : ''}`);
+      row('Cell', `#${info.index + 1}`);
+      if (info.locked)
+        row('Locked', info.differs.length ? `keeps its own ${info.differs.join(', ')}` : 'keeps the settings it was locked with',
+            'locked');
       row('Seed', info.seed.toString(16).padStart(8, '0'));
       row('Size', `${sprite.w} × ${sprite.h}`);
       row('Symmetry', req.name);
@@ -55,6 +58,20 @@ export function mountInspector(root, { onCopyRecipe, onExport }){
       row('Fold', gen.fold === 1 ? 'v1: the old app, exact' : 'v2: corrected');
       row('Recipe', sprite.recipeText, 'recipe-text');
 
+      const cells = document.createElement('div');
+      cells.className = 'buttons';
+      const lock = document.createElement('button'); lock.type = 'button';
+      lock.textContent = info.locked ? 'Unlock' : 'Lock';
+      lock.className = info.locked ? 'locked' : '';
+      lock.setAttribute('aria-pressed', String(info.locked));
+      lock.title = info.locked ? 'Let this sprite follow the sheet settings again (L)'
+                               : 'Keep this sprite as it is while the settings change (L, or ⌘/Ctrl-click)';
+      lock.addEventListener('click', onLock);
+      const reroll = document.createElement('button'); reroll.type = 'button'; reroll.textContent = 'Reroll';
+      reroll.title = 'A new seed for this sprite only; also unlocks it (Shift+R, or Shift-click)';
+      reroll.addEventListener('click', onReroll);
+      cells.append(lock, reroll);
+
       const bar = document.createElement('div');
       bar.className = 'buttons';
       const b1 = document.createElement('button'); b1.type = 'button'; b1.textContent = 'Copy recipe';
@@ -64,7 +81,7 @@ export function mountInspector(root, { onCopyRecipe, onExport }){
       b2.title = 'This sprite alone, at the sheet scale';
       b2.addEventListener('click', onExport);
       bar.append(b1, b2);
-      body.append(preview, dl, bar);
+      body.append(preview, cells, dl, bar);
     },
   };
 }

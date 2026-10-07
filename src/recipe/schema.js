@@ -35,6 +35,16 @@ export const DEFAULT_RECIPE = Object.freeze({
   overrides: Object.freeze({}),
 });
 
+/* Context-free names for every setting, as 'part.key', for labels. */
+export const SETTING_LABELS = {
+  'gen.source':'Source', 'gen.formula':'Formula', 'gen.expr':'Expression', 'gen.modulus':'Modulus',
+  'gen.stride':'Stride', 'gen.phase':'Phase', 'gen.coverage':'Coverage', 'gen.vary':'Vary per cell',
+  'gen.ca':'CA smooth', 'gen.mask':'Mask', 'gen.maskScale':'Mask size', 'gen.maskInvert':'Mask invert',
+  'gen.outline':'Outline', 'gen.w':'Width', 'gen.h':'Height', 'gen.symmetry':'Symmetry', 'gen.fold':'Fold',
+  'gen.bpc':'Gamut', 'gen.ncol':'Colours', 'gen.colorMode':'Colour mode', 'gen.sortLum':'Sort by luminance',
+  'sheet.cols':'Columns', 'sheet.rows':'Rows', 'sheet.spacing':'Spacing', 'sheet.scale':'Scale',
+};
+
 /* What each setting may hold. Ranges are the old app's <input> min/max. */
 const oneOf = list => ({ kind: 'enum', list });
 const num = (lo, hi, int) => ({ kind: 'num', lo, hi, int });

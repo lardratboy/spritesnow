@@ -87,7 +87,7 @@ button.primary{ background:var(--accent); border-color:var(--accent); color:#fff
 .tl-prune button:disabled{ opacity:.4; cursor:default }
 .tl-strip{
   position:relative; display:flex; gap:5px; overflow-x:auto; overflow-y:hidden;
-  padding:4px 10px 8px; height:78px; align-items:flex-start;
+  padding:4px 10px 8px; align-items:flex-start;   /* no fixed height: room for the scrollbar */
 }
 .frame{
   position:relative; flex:0 0 auto; border:2px solid var(--line); border-radius:5px; background:var(--sunk);
@@ -119,6 +119,8 @@ button.primary{ background:var(--accent); border-color:var(--accent); color:#fff
 #inspector dd{ margin:0; overflow-wrap:anywhere }
 #inspector .recipe-text{ font-family:ui-monospace, monospace; font-size:12px }
 #inspector .reduced{ color:var(--warn) }
+#inspector .locked{ color:var(--bad) }
+#inspector button.locked{ background:var(--bad); border-color:var(--bad); color:#fff }
 
 /* ----------------------------------------------------------------- narrow */
 @media (max-width: 900px){
