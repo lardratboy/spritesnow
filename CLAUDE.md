@@ -18,9 +18,30 @@ No bundler, no `node_modules`.
 
 ## Workflow rules
 
-- Never commit directly to `main`. Work on a feature branch, one milestone
-  step per commit, and merge when `npm test` is green.
 - One milestone step per session. Tick it off in `docs/newdesign.md` §6.
+
+## Git: Claude does all of it
+
+The user has asked Claude to handle every git step without asking. For
+each milestone step:
+
+1. Create a lowercase feature branch from an up-to-date `main`, named
+   `m<N>/<topic>` (for example `m3/timeline`). Never commit to `main`
+   directly.
+2. Work until `npm test` is green. Commit with a descriptive message that
+   says what changed, how it was verified, and whether goldens changed
+   (normally "No golden changes").
+3. Fast-forward `main` to the branch (`git merge --ff-only`), then push
+   both `main` and the branch to `origin`.
+4. Tell the user what was pushed (commit hash, test count).
+
+Still ask first before anything destructive or irreversible: force-push,
+rewriting history, or deleting a branch on GitHub.
+
+Branch names must not differ only by case, and must not collide with an
+existing branch's folder (`m0` vs `M0`). The user's Mac filesystem is
+case-insensitive, and such a clash breaks `git pull`. Never ask the user
+to create branches or commits themselves.
 - If a golden test fails, the change is wrong: fix the change, do not
   regenerate the goldens.
 - The user is new to local development. Explain what a command does before
