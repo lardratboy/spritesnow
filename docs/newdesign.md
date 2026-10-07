@@ -80,7 +80,7 @@ Three rules:
 
 | | Milestone | Done when |
 |---|---|---|
-| **M0** | **Scaffold and oracle** | The project runs on `npm run serve`. `npm test` loads the old generator from `reference/` and writes goldens for the fixture matrix |
+| **M0** ✅ | **Scaffold and oracle** | The project runs on `npm run serve`. `npm test` loads the old generator from `reference/` and writes goldens for the fixture matrix. *Done 2026-10-06: 1,568 goldens (7 modes × 8 sizes × 7 sources × 4 seeds), and the reference file's hash is pinned* |
 | **M1** | **Core and symmetry engine** | The ported core matches the goldens wherever the old fold was correct. `groups.test.js` passes for all 10 groups on every grid from 2×2 to 40×40. The measurement scripts from `from3Dto2D.md` become these tests |
 | **M2** | **Minimal app (v1)** | A browser user can generate a sheet, pick from all 10 symmetries, see the effective group and aut, copy a recipe or permalink, export PNG, and load an old v4 session |
 | M3 | Workshop | Timeline (NG's take/keyframe version), collection, lock and reroll are ported |
