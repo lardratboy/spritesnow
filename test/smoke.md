@@ -1,4 +1,4 @@
-# Browser smoke test (M2, M3a, M3b, M3c, M4a, M4b, M5a, M5b)
+# Browser smoke test (M2, M3a, M3b, M3c, M4a, M4b, M5a, M5b, M5c)
 
 What to check by hand after a change to the UI. About five minutes.
 
@@ -245,3 +245,60 @@ checks that these links decode to these recipes.
     "Tier field off: random noise has no field."
 53. **Link.** "Copy link" with a field set, paste in a new tab: the same
     sheet, with the same Field selected.
+
+## Tier view (M5c)
+
+The **Blocks** button (top right of the sheet, or **G**) draws where each
+tiered sprite's blocks meet. Outer tiers' edges are stronger, inner ones
+fainter. It is a view setting: it is not in the link or the timeline. The
+inspector lists each tier's groups and its free cells. `tierview.test.js`
+checks that these links decode to these recipes and free cells.
+
+| | Symmetry | Size | Tiers | Free cells | Link |
+|---|---|---|---|---|---|
+| A | rot90 | 16×16 | `4 / 4 mirror-x` | 16 | <http://localhost:8000/#r=eyJmIjoic3ByaXRlc25vdy8xIiwiZyI6eyJzeW1tZXRyeSI6InJvdDkwIiwidGllcnMiOiI0IC8gNCBtaXJyb3IteCJ9LCJwIjoxfQ> |
+| B | none | 16×16 | `4 copy:dihedral / 4 copy:dihedral` | 9 | <http://localhost:8000/#r=eyJmIjoic3ByaXRlc25vdy8xIiwiZyI6eyJzeW1tZXRyeSI6Im5vbmUiLCJ0aWVycyI6IjQgY29weTpkaWhlZHJhbCAvIDQgY29weTpkaWhlZHJhbCJ9LCJwIjoxfQ> |
+| C | dihedral | 32×32 | `2 / 4 mirror-x / 4 rot90` | 10 | <http://localhost:8000/#r=eyJmIjoic3ByaXRlc25vdy8xIiwiZyI6eyJ3IjozMiwiaCI6MzIsInN5bW1ldHJ5IjoiZGloZWRyYWwiLCJ0aWVycyI6IjIgLyA0IG1pcnJvci14IC8gNCByb3Q5MCJ9LCJwIjoxfQ> |
+| D | mirror-x | 24×16 | `3x2 / 8 mirror-y` | 96 | <http://localhost:8000/#r=eyJmIjoic3ByaXRlc25vdy8xIiwiZyI6eyJ3IjoyNCwic3ltbWV0cnkiOiJtaXJyb3IteCIsInRpZXJzIjoiM3gyIC8gOCBtaXJyb3IteSJ9LCJwIjoxfQ> |
+| E | mirror-x | 12×12 | — | — | <http://localhost:8000/#r=eyJmIjoic3ByaXRlc25vdy8xIiwiZyI6eyJ3IjoxMiwiaCI6MTJ9LCJvIjp7IjkiOnsiZ2VuIjp7InciOjE2LCJoIjoxNiwidGllcnMiOiI0IC8gNCBtaXJyb3IteCJ9fX0sInAiOjF9> |
+
+54. **Toggle.** Open link A and press **Blocks** (or **G**). The button
+    lights up, and each sprite gets a magenta cross-hatch every 4 pixels
+    (3 lines across, 3 down). The lines never cross the gaps between
+    sprites. Press it again and they go. The timeline gets no new entry, and
+    the address bar does not change.
+55. **Lines up.** With the grid on, zoom in with **+** and out with **−**,
+    scroll to zoom, and drag to pan. Each line stays on the boundary
+    between two rows or columns of sprite pixels and never cuts through
+    one. Now open link A with `?gl=0` before the `#`
+    (<http://localhost:8000/?gl=0#r=eyJmIjoic3ByaXRlc25vdy8xIiwiZyI6eyJzeW1tZXRyeSI6InJvdDkwIiwidGllcnMiOiI0IC8gNCBtaXJyb3IteCJ9LCJwIjoxfQ>):
+    the status line ends "· 2D" instead of "· WebGL2", and the grid looks
+    the same.
+56. **Inspector.** Still on link A, click a sprite. The inspector shows:
+    - Tiers: `4 / 4 mirror-x`
+    - Tier 1: "4×4 blocks of 4×4 · blocks C4 · pinwheel · copies C2 ·
+      rotate 180° · 64 free cells"
+    - Tier 2: "4×4 cells · blocks D2 · both axis mirrors · copies D2 · both
+      axis mirrors · 16 free cells"
+    - Free cells: "16 of 256 (64 without tiers)"
+57. **Tiers add symmetry.** Open link B and click a sprite. Symmetry says
+    "C1 · none", but a "With tiers" row says "D4 · all eight (the tiers
+    add symmetry)", and Symmetries reads "8 of 8 (guaranteed 8)". Tier 1
+    has 48 free cells, Tier 2 has 9.
+58. **Three tiers.** Open link C and turn the grid on. Each 32×32 sprite has
+    one strong cross through its middle, between the "2×2 blocks of
+    16×16" the inspector lists for Tier 1, and fainter lines every 4
+    pixels, between Tier 2's "4×4 blocks of 4×4". The inspector's free
+    cells go 136, 36, 10 from Tier 1 to Tier 3.
+59. **Rectangle.** Open link D: 24×16 sprites with two strong lines down
+    (at 8 and 16) and one across (at 8), and no fainter ones, since the
+    inner tier is single cells.
+60. **Only tiered sprites.** Open link E and turn the grid on: of the 12×12
+    sprites, only cell 10 (row 2, column 2), locked as a 16×16
+    tiered sprite that spills over its neighbours, has lines. Click it: the
+    inspector shows its tiers.
+61. **Off.** On link A with the grid on, set Height to 12. The lines go,
+    and the inspector's Tiers row is amber: "4 / 4 mirror-x (off: 4·4 = 16,
+    sprite is 16×12)". Turn the grid off and on again: the status line says
+    "block grid on, but no sprite on the sheet has tiers on". Set Height
+    back to 16 and the lines come back.

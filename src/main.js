@@ -11,7 +11,8 @@
    sprites come from a cache, and only changed cells are redrawn
    (workshop/sheet.js). Exports rasterise at the scale on demand.
    The view draws the sprites with WebGL2 (ui/gl-sheet.js), or the scale-1
-   canvas when it cannot; ?gl=0 in the URL forces the canvas. */
+   canvas when it cannot; ?gl=0 in the URL forces the canvas. The block
+   grid (G) is a view setting: it is not in the recipe or the timeline. */
 import { normalize, cellSettings, resizeSheet, soloRecipe } from './recipe/schema.js';
 import { encode, decode } from './recipe/permalink.js';
 import { aut } from './core/groups2d.js';
@@ -337,6 +338,12 @@ const inspector = mountInspector($('inspector'), {
   onKeep: () => onSelected('keep'),
 });
 $('fit').addEventListener('click', () => view.fit());
+function toggleBlocks(){
+  view.setBlockGrid(!view.blockGrid);
+  $('blocks').setAttribute('aria-pressed', String(view.blockGrid));
+  if (view.blockGrid && !view.blockEdgeCount()){ say('block grid on, but no sprite on the sheet has tiers on'); setStatus(); }
+}
+$('blocks').addEventListener('click', toggleBlocks);
 $('zoom-in').addEventListener('click', () => view.zoom(1.25));
 $('zoom-out').addEventListener('click', () => view.zoom(0.8));
 
@@ -347,6 +354,7 @@ const KEYS = {
   k: () => onSelected('keep'),
   Escape: () => select(-1),
   f: () => view.fit(),
+  g: toggleBlocks,
   '+': () => view.zoom(1.25), '=': () => view.zoom(1.25), '-': () => view.zoom(0.8),
   ArrowLeft: () => jump(tl.playhead - 1), ArrowRight: () => jump(tl.playhead + 1),
   Home: () => jump(0), End: () => jump(tl.entries.length - 1),

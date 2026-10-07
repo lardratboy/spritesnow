@@ -5,8 +5,10 @@
    The grammar itself (parseTiers, printTiers, tierState) is in
    src/core/tiers.js, because generation reads gen.tiers and the core does
    not import from this layer. This module adds what the recipe and the UI
-   need on top: canonical text and the splits of a size. Pure. */
-import { parseTiers, printTiers, tierState } from '../core/tiers.js';
+   need on top: canonical text, the splits of a size, and the readout the
+   inspector shows (M5c). Pure. */
+import { parseTiers, printTiers, tierState, cachedTieredTable } from '../core/tiers.js';
+import { orbitTable } from '../core/groups2d.js';
 
 export { parseTiers, printTiers, tierState };
 
@@ -50,4 +52,29 @@ export function withSplit(prev, across, down){
     block: i > 0 && prev && prev[i] ? prev[i].block : null,
     copy: prev && prev[i] ? prev[i].copy : null,
   }));
+}
+
+/** What a gen's tiers do, for the inspector (M5c).
+ *  @returns {null | { on:false, text:string, reason:string }
+ *                 | { on:true, text, orbits, plain, group, tiers:object[] }}
+ *    null when gen.tiers is empty.
+ *    orbits  free cells (orbits) with the tiers, plain without them
+ *    group   the sprite's guaranteed group (a subgroup id)
+ *    tiers[i] = tieredOrbitTable's tiers[i] plus `orbits`: the free cells
+ *            with the groups of tiers 0 .. i alone, so each tier's share of
+ *            the repetition can be read off, outer to inner */
+export function tierReadout(gen){
+  const text = String(gen.tiers || '').trim();
+  if (!text) return null;
+  const state = tierState(gen);
+  if (!state.on) return { on: false, text, reason: state.reason };
+  const { symmetry, w, h } = gen;
+  const table = cachedTieredTable(symmetry, w, h, state.tiers);
+  const upTo = i => state.tiers.map((t, j) => j <= i ? t : { ...t, block: null, copy: null });
+  return {
+    on: true, text: printTiers(state.tiers), orbits: table.orbitCount, group: table.group,
+    plain: orbitTable(symmetry, w, h, 2).orbitCount,
+    tiers: table.tiers.map((t, i) => ({ ...t,
+      orbits: i === table.tiers.length - 1 ? table.orbitCount : cachedTieredTable(symmetry, w, h, upTo(i)).orbitCount })),
+  };
 }

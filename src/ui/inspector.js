@@ -1,8 +1,15 @@
 /* The selected sprite: a large preview, its recipe text, the requested
    group, the EFFECTIVE group (highlighted whenever a non-square grid
    reduces it, newdesign.md D3), and aut(), the number of symmetries the
-   finished sprite actually has. */
-import { groupById } from '../core/groups2d.js';
+   finished sprite actually has.
+   With tiers (M5c): each tier's shape and resulting groups, and the free
+   cells (orbits) once its groups are added to the outer tiers', so each
+   tier's share of the repetition can be read off. With tiers on, the
+   guaranteed symmetry is the tiered sprite's group, which can be more than
+   the Symmetry setting. Tiers or a tier field that are off say why. */
+import { groupById, orbitTable } from '../core/groups2d.js';
+import { tierFieldState } from '../core/tierfields.js';
+import { tierReadout } from '../recipe/tiers.js';
 import { imageToCanvas } from '../raster/png.js';
 
 /**
@@ -53,10 +60,29 @@ export function mountInspector(root, { onCopyRecipe, onExport, onLock, onReroll,
       row('Size', `${sprite.w} × ${sprite.h}`);
       row('Symmetry', req.name);
       if (eff.id !== req.id) row('Effective', `${eff.name} (a ${sprite.w}×${sprite.h} grid is not square)`, 'reduced');
-      const extra = info.aut > eff.order ? ' · more than asked for' : '';
-      row('Symmetries', `${info.aut} of ${sprite.w === sprite.h ? 8 : 4} (guaranteed ${eff.order})${extra}`);
+      const tiers = tierReadout(gen);
+      const sure = tiers?.on ? groupById(tiers.group) : eff;
+      if (sure.id !== eff.id) row('With tiers', `${sure.name} (the tiers add symmetry)`);
+      const extra = info.aut > sure.order ? ' · more than asked for' : '';
+      row('Symmetries', `${info.aut} of ${sprite.w === sprite.h ? 8 : 4} (guaranteed ${sure.order})${extra}`);
       row('Chiral', eff.chiral ? 'yes: has a distinct mirror twin' : 'no');
       row('Fold', gen.fold === 1 ? 'v1: the old app, exact' : 'v2: corrected');
+      if (tiers && !tiers.on) row('Tiers', `${tiers.text} (off: ${tiers.reason})`, 'reduced');
+      if (tiers?.on){
+        row('Tiers', tiers.text);
+        const last = tiers.tiers.length - 1;
+        tiers.tiers.forEach((t, i) => {
+          const what = i === last ? `${t.rx}×${t.ry} cells` : `${t.rx}×${t.ry} blocks of ${t.sx}×${t.sy}`;
+          const misfit = ['block', 'copy'].some(k => t[k].asked && t[k].fit !== t[k].asked);
+          row(`Tier ${i + 1}`, `${what} · blocks ${groupById(t.block.result).name} · copies ${groupById(t.copy.result).name}` +
+              `${misfit ? ' · a group does not fit' : ''} · ${t.orbits} free cells`, misfit ? 'reduced' : '');
+        });
+      }
+      const free = tiers?.on ? tiers.orbits : gen.fold === 2 ? orbitTable(gen.symmetry, sprite.w, sprite.h, 2).orbitCount : null;
+      if (free !== null)
+        row('Free cells', `${free} of ${sprite.w * sprite.h}` + (tiers?.on ? ` (${tiers.plain} without tiers)` : ''));
+      const field = tierFieldState(gen);
+      if (field.id !== 'none') row('Tier field', field.on ? field.id : `${field.id} (off: ${field.reason})`, field.on ? '' : 'reduced');
       row('Recipe', sprite.recipeText, 'recipe-text');
 
       const cells = document.createElement('div');

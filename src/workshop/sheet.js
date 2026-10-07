@@ -7,9 +7,12 @@
      at the recipe's scale on demand (sheetAtScale).
    - When the layout is unchanged and every sprite fits its cell, only the
      cells whose sprite changed are redrawn, in place.
+   - blockEdges gives the view's block grid (M5c): where each tiered
+     sprite's blocks meet, placed as the raster places the sprite.
    Pure: no DOM, so Node tests check every build against a fresh one. */
 import { cellSettings } from '../recipe/schema.js';
 import { generateSprite } from '../core/generate.js';
+import { parseTiers, tierLayout } from '../core/tiers.js';
 import { paletteFor } from '../core/palette.js';
 import { rasterizeSheet, redrawCells } from '../raster/rasterize.js';
 
@@ -80,4 +83,46 @@ export function buildSheet(recipe, cache, prev = null){
   }
   const image = rasterizeSheet(sheetItems(recipe, sprites), layout, { scale: 1 });
   return { sprites, layout, image, generated, dirty: null };
+}
+
+/* ------------------------------------------------------------ block grid */
+
+/* One sprite's edges, relative to its top left, kept per (w, h, tiers). */
+const edgeCache = new Map();
+function spriteEdges(w, h, text){
+  const key = `${w}|${h}|${text}`;
+  let out = edgeCache.get(key);
+  if (out) return out;
+  out = [];
+  const L = tierLayout(parseTiers(text).tiers);
+  for (let i = 1; i < L.length; i++){
+    const { bw, bh } = L[i], ow = L[i - 1].bw, oh = L[i - 1].bh;
+    for (let x = bw; x < w; x += bw) if (x % ow) out.push({ x, y: 0, len: h, vertical: true, depth: i });
+    for (let y = bh; y < h; y += bh) if (y % oh) out.push({ x: 0, y, len: w, vertical: false, depth: i });
+  }
+  if (edgeCache.size >= 64) edgeCache.delete(edgeCache.keys().next().value);
+  edgeCache.set(key, out);
+  return out;
+}
+
+/** Where the blocks of every tiered sprite on a sheet meet, for the view's
+ *  block grid (newdesign.md §5.2, M5c). Tier i's blocks (i >= 1) meet on
+ *  the multiples of its block size; each edge is listed once, at the
+ *  outermost tier it belongs to, and the sprite's own border is left out.
+ *  Sprites without tiers (or with tiers switched off) have none.
+ *  In sheet px at scale 1, each sprite placed as rasterizeSheet places it.
+ *  @param {object[]} sprites  a build's sprites, cell by cell
+ *  @param {{cols, cellW, cellH, spacing}} layout
+ *  @returns {{ x:number, y:number, len:number, vertical:boolean, depth:number }[]}
+ *    a vertical edge runs down from (x, y) for len px, a horizontal one
+ *    across; depth is the tier (1 = the outermost tier's blocks' edges) */
+export function blockEdges(sprites, layout){
+  const out = [], outerW = layout.cellW + layout.spacing, outerH = layout.cellH + layout.spacing;
+  sprites.forEach((s, i) => {
+    if (!s.tiers) return;
+    const X = (i % layout.cols) * outerW + Math.floor((layout.cellW - s.w) / 2);
+    const Y = ((i / layout.cols) | 0) * outerH + Math.floor((layout.cellH - s.h) / 2);
+    for (const e of spriteEdges(s.w, s.h, s.tiers)) out.push({ ...e, x: X + e.x, y: Y + e.y });
+  });
+  return out;
 }

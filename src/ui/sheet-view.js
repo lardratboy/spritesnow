@@ -9,8 +9,13 @@
    The view multiplies its zoom by the recipe's scale, so nothing grows with
    scale² (newdesign.md §5.1). view.s is the zoom relative to the exported
    sheet, as before M4a. Outlines are drawn on the screen only, and never
-   into exported pixels. */
+   into exported pixels.
+   The block grid (M5c) is drawn on the same 2D canvas, in device pixels:
+   an edge at sheet x lands on the first device pixel whose centre shows
+   sheet x or more, the rule both the shader and drawImage use, so it lines
+   up with the sprite pixels on either path. */
 import { createGLSheet } from './gl-sheet.js';
+import { blockEdges } from '../workshop/sheet.js';
 
 /**
  * @param {HTMLElement} root
@@ -18,6 +23,9 @@ import { createGLSheet } from './gl-sheet.js';
  *        mod is ⌘ on a Mac, Ctrl elsewhere (either is accepted); alt is Option on a Mac.
  *        gl: false forces the 2D path.
  */
+/* Edge opacity by tier, outer to inner; deeper tiers use the last. */
+const GRID_ALPHA = [0.8, 0.5, 0.35];
+
 export function mountSheetView(root, { onSelect, gl = true }){
   const glCanvas = document.createElement('canvas');
   let gpu = gl ? createGLSheet(glCanvas) : null;
@@ -30,6 +38,7 @@ export function mountSheetView(root, { onSelect, gl = true }){
   root.append(canvas);
   const ctx = canvas.getContext('2d');
   let image = null, layout = null, scale = 1, selected = -1, locked = [], onGPU = false;
+  let built = null, grid = false, edges = null;      // edges: blockEdges of the build, made when first drawn
   let view = { x: 0, y: 0, s: 1 }, sizeKey = '';
 
   const dpr = () => window.devicePixelRatio || 1;
@@ -48,6 +57,7 @@ export function mountSheetView(root, { onSelect, gl = true }){
       ctx.drawImage(image, 0, 0);
     }
     if (!layout) return;
+    if (grid) drawGrid(r*view.x, r*view.y, r*z);
     const n = layout.cols * layout.rows;
     const box = (i, pad) => {
       const c = i % layout.cols, rw = (i / layout.cols) | 0;
@@ -72,6 +82,44 @@ export function mountSheetView(root, { onSelect, gl = true }){
       ctx.setLineDash([]);
     }
   }
+  /* Tier block edges, deepest first so outer edges sit on top. Each depth
+     is one path, so crossings within it are not blended twice. Lines are
+     2 device px across the edge from a zoom of 8 device px per sheet px,
+     else 1 px on the far side, so they cover little of the sprite. Below 1 device px per sheet px edges would
+     merge, so none are drawn. */
+  function drawGrid(x0, y0, Z){
+    if (Z < 1 || !built) return;
+    edges ??= blockEdges(built.sprites, built.layout);
+    if (!edges.length) return;
+    const at = (o, v) => Math.ceil(o + v * Z - 0.5);
+    const lw = Z >= 8 ? 2 : 1, half = lw >> 1, W = canvas.width, H = canvas.height;
+    const depths = new Map();
+    for (const e of edges){
+      const ex = at(x0, e.x), ey = at(y0, e.y);
+      if (e.vertical){
+        const y1 = at(y0, e.y + e.len);
+        if (ex - half + lw <= 0 || ex - half >= W || y1 <= 0 || ey >= H) continue;
+        add(depths, e.depth, ex - half, ey, lw, y1 - ey);
+      } else {
+        const x1 = at(x0, e.x + e.len);
+        if (ey - half + lw <= 0 || ey - half >= H || x1 <= 0 || ex >= W) continue;
+        add(depths, e.depth, ex, ey - half, x1 - ex, lw);
+      }
+    }
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = token('--grid', '#ff4fd8');
+    for (const d of [...depths.keys()].sort((a, b) => b - a)){
+      ctx.globalAlpha = GRID_ALPHA[Math.min(d, GRID_ALPHA.length) - 1];
+      ctx.fill(depths.get(d));
+    }
+    ctx.restore();
+  }
+  function add(depths, d, x, y, w, h){
+    if (!depths.has(d)) depths.set(d, new Path2D());
+    depths.get(d).rect(x, y, w, h);
+  }
+
   /* Whole device pixels, with a CSS size to match: a 567 px canvas
      stretched over a stage 566.625 px tall is resampled when composited. */
   function resize(){
@@ -87,11 +135,12 @@ export function mountSheetView(root, { onSelect, gl = true }){
   const fitZoom = () => Math.min((root.clientWidth - 32) / (image.width * scale),
                                  (root.clientHeight - 32) / (image.height * scale));
   /** Fit the sheet in view, at a whole-number zoom when it fits at 1x or
-   *  more, and on whole device pixels, so sprite pixels have sharp edges. */
+   *  more, else at a whole number of screen px per sheet px when that fits,
+   *  and on whole device pixels, so sprite pixels have sharp edges. */
   function fit(){
     if (!image) return;
     const s = fitZoom(), r = dpr();
-    view.s = s >= 1 ? Math.floor(s) : Math.max(Math.min(0.05, s), 1e-3);
+    view.s = s >= 1 ? Math.floor(s) : s * scale >= 1 ? Math.floor(s * scale) / scale : Math.max(s, 1e-3);
     view.x = Math.round((root.clientWidth - image.width * zoom()) / 2 * r) / r;
     view.y = Math.round((root.clientHeight - image.height * zoom()) / 2 * r) / r;
     draw();
@@ -146,7 +195,7 @@ export function mountSheetView(root, { onSelect, gl = true }){
      *  @param {number} sheetScale  the recipe's scale: the view's zoom is multiplied by it */
     setSheet(sheet, img, sheetScale = 1){
       const { cols, rows, cellW, cellH, spacing } = sheet.layout;
-      image = img; scale = sheetScale;
+      image = img; scale = sheetScale; built = sheet; edges = null;
       layout = { cols, rows, outerW: cellW + spacing, outerH: cellH + spacing,
                  offX: 0, offY: 0, spriteW: cellW, spriteH: cellH };
       onGPU = !!gpu && gpu.setSheet(sheet.sprites, sheet.layout);
@@ -163,6 +212,12 @@ export function mountSheetView(root, { onSelect, gl = true }){
     setView(v){ Object.assign(view, v); draw(); },
     stats: () => ({ renderer: onGPU ? 'WebGL2' : '2D', ...gpu?.stats }),
     setSelection(i){ selected = i; draw(); },
+    /** Show or hide the tier block grid (M5c). A view setting, not part of
+     *  the recipe. */
+    setBlockGrid(on){ grid = !!on; draw(); },
+    get blockGrid(){ return grid; },
+    /** How many block edges the sheet has (0 when no sprite has tiers on). */
+    blockEdgeCount(){ return built ? (edges ??= blockEdges(built.sprites, built.layout)).length : 0; },
     /** @param {number[]} indices  the locked cells */
     setLocked(indices){ locked = indices; draw(); },
     fit,

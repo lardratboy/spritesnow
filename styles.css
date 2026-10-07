@@ -1,11 +1,13 @@
 :root{
   --bg:#0d1117; --panel:#161b22; --raised:#1c222b; --sunk:#0b0f14; --line:#2a3038;
   --ink:#e6edf3; --dim:#8b949e; --accent:#4f8cff; --warn:#f0b429; --bad:#ef4444;
+  --grid:#ff4fd8;
 }
 @media (prefers-color-scheme: light){
   :root:not([data-theme="dark"]){
     --bg:#f6f8fa; --panel:#ffffff; --raised:#f3f5f8; --sunk:#e9edf2; --line:#d0d7de;
     --ink:#1f2328; --dim:#59636e; --accent:#2f6fe0; --warn:#9a6700; --bad:#cf222e;
+    --grid:#c0189a;
   }
 }
 *{ box-sizing:border-box }
@@ -64,6 +66,7 @@ button.primary{ background:var(--accent); border-color:var(--accent); color:#fff
 #stage canvas{ position:absolute; inset:0; width:100%; height:100%; display:block }
 #toolbar{ position:absolute; top:10px; right:10px; display:flex; gap:4px }
 #toolbar button{ background:var(--panel); min-width:32px }
+#toolbar button[aria-pressed="true"]{ background:var(--accent); border-color:var(--accent); color:#fff }
 #status{ padding:6px 12px; border-top:1px solid var(--line); background:var(--panel); color:var(--dim); min-height:30px }
 #status .warn{ color:var(--warn) }
 #status .bad{ color:var(--bad) }
