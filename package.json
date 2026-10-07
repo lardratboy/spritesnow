@@ -10,6 +10,7 @@
     "test:browser": "node --test --test-concurrency=1 test/browser/*.test.js",
     "golden": "node tools/make-golden.js",
     "golden:tiers": "node tools/make-golden-tiers.js",
+    "golden:frames": "node tools/make-golden-frames.js",
     "measure": "node tools/measurements/foldcheck.js && node tools/measurements/groups.js"
   }
 }

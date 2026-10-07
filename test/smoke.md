@@ -302,3 +302,69 @@ checks that these links decode to these recipes and free cells.
     sprite is 16×12)". Turn the grid off and on again: the status line says
     "block grid on, but no sprite on the sheet has tiers on". Set Height
     back to 16 and the lines come back.
+
+## Animated sprites (M6a)
+
+The **Animation** section (under Tiers) sets the number of frames, a
+motion relating them, and a drive that moves the field in time. Until
+M6b, the sheet shows frame 0 and the inspector shows every frame of the
+selected sprite as a strip; there is no playback yet. Each link is a row
+of newdesign.md §5.3's table: 16×16 sprites, 16 frames. `spacetime.test.js`
+checks that these links decode to these motions, free frames and free cells.
+
+| | Motion | Symmetry | Drive | Free frames | Free cells | Link |
+|---|---|---|---|---|---|---|
+| A | none | none | phase 1 | 16 | 4,096 | <http://localhost:8000/#r=eyJmIjoic3ByaXRlc25vdy8xIiwiZyI6eyJzeW1tZXRyeSI6Im5vbmUiLCJmcmFtZXMiOjE2fSwicCI6MX0> |
+| B | `id +1/2` | none | phase 2 | 8 | 2,048 | <http://localhost:8000/#r=eyJmIjoic3ByaXRlc25vdy8xIiwiZyI6eyJzeW1tZXRyeSI6Im5vbmUiLCJmcmFtZXMiOjE2LCJtb3Rpb24iOiJpZCArMS8yIiwiZHJpdmVBbW91bnQiOjJ9LCJwIjoxfQ> |
+| C | `id ~` | none | phase 1 | 9 | 2,304 | <http://localhost:8000/#r=eyJmIjoic3ByaXRlc25vdy8xIiwiZyI6eyJzeW1tZXRyeSI6Im5vbmUiLCJmcmFtZXMiOjE2LCJtb3Rpb24iOiJpZCB-In0sInAiOjF9> |
+| D | `rot90 +1/4` | none | spin 1 | 4 | 1,024 | <http://localhost:8000/#r=eyJmIjoic3ByaXRlc25vdy8xIiwiZyI6eyJzeW1tZXRyeSI6Im5vbmUiLCJmcmFtZXMiOjE2LCJtb3Rpb24iOiJyb3Q5MCArMS80IiwiZHJpdmUiOiJzcGluIn0sInAiOjF9> |
+| E | `rot90 +1/2` | none | phase 1 | 8 | 1,024 | <http://localhost:8000/#r=eyJmIjoic3ByaXRlc25vdy8xIiwiZyI6eyJzeW1tZXRyeSI6Im5vbmUiLCJmcmFtZXMiOjE2LCJtb3Rpb24iOiJyb3Q5MCArMS8yIn0sInAiOjF9> |
+| F | `rot180 +1/2` | none | spin 1 | 8 | 2,048 | <http://localhost:8000/#r=eyJmIjoic3ByaXRlc25vdy8xIiwiZyI6eyJzeW1tZXRyeSI6Im5vbmUiLCJmcmFtZXMiOjE2LCJtb3Rpb24iOiJyb3QxODAgKzEvMiIsImRyaXZlIjoic3BpbiJ9LCJwIjoxfQ> |
+| G | `mirror-x +1/2` | none | phase 1 | 8 | 2,048 | <http://localhost:8000/#r=eyJmIjoic3ByaXRlc25vdy8xIiwiZyI6eyJzeW1tZXRyeSI6Im5vbmUiLCJmcmFtZXMiOjE2LCJtb3Rpb24iOiJtaXJyb3IteCArMS8yIn0sInAiOjF9> |
+| H | `mirror-x ~` | none | phase 1 | 9 | 2,048 | <http://localhost:8000/#r=eyJmIjoic3ByaXRlc25vdy8xIiwiZyI6eyJzeW1tZXRyeSI6Im5vbmUiLCJmcmFtZXMiOjE2LCJtb3Rpb24iOiJtaXJyb3IteCB-In0sInAiOjF9> |
+| I | `rot90 +1/4` | mirror-x | spin 1 | 4 | 256 | <http://localhost:8000/#r=eyJmIjoic3ByaXRlc25vdy8xIiwiZyI6eyJmcmFtZXMiOjE2LCJtb3Rpb24iOiJyb3Q5MCArMS80IiwiZHJpdmUiOiJzcGluIn0sInAiOjF9> |
+
+62. **Frames.** Open <http://localhost:8000/> and set Frames to 16. Motion,
+    Drive and Amount appear, and the note under them says "16 of 16 frames
+    free · 2,048 free cells". The sheet does not change: frame 0 is the
+    still sprite. The timeline's new entry reads "Frames 1 → 16".
+63. **Strip.** Click a sprite. Under the preview, 16 small frames numbered
+    0 to 15, all outlined in blue (every frame is free). The inspector says
+    Frames "16 · drive phase 1", Free frames "16 of 16", and "every frame
+    Cs · mirror left/right". Scanning the strip, the colour bands shift a
+    little from frame to frame.
+64. **Spin.** Open link D and click a sprite. Only frames 0 to 3 are
+    outlined. Frame 4 is frame 0 turned 90° clockwise, frame 8 is it turned
+    180°, frame 12 turned 270°. Fit: "the motion overrides 0% of the drive
+    (the drive turns with it)", and the note under Drive says the motion
+    only corrects rounding.
+65. **Suggestion.** On link D, set Drive to "Phase". The note offers
+    "Use spin 1"; click it. Drive is back to Spin, Amount 1, and the
+    timeline has one new entry for both.
+66. **Sway.** Open link H and click a sprite. Frame groups: "0, 8: Cs ·
+    mirror left/right · 1–7, 9–15: C1 · none". Frames 0 and 8 are mirror
+    images of themselves; frame 9 is frame 7 mirrored, frame 15 is frame 1
+    mirrored. Frames 0 to 8 are outlined.
+67. **Extra symmetry.** Open link I (mirror-x with the spin motion) and
+    click a sprite. A "With motion" row says "D2 · both axis mirrors (the
+    motion adds symmetry to frame 0)", and every frame is mirrored both
+    ways. The note under Drive says the motion still overrides part of the
+    drive, and Fit is about 50%.
+68. **Custom.** On link D, set Motion to "Custom…". Two Element rows
+    appear: "turn 90° clockwise, +¼ loop" and "—". Set Element 2 to "mirror
+    left/right" and its time to "reverse: t → −t". The note says "3 of 16
+    frames free", and the recipe text in the inspector ends "motion rot90
+    +1/4, mirror-x ~ · drive spin 1".
+69. **Off.** On link D, set Frames to 6. An amber note: "Motion off: rot90
+    +1/4 needs a multiple of 4 frames, not 6." The inspector's Motion row
+    is amber too. Set Frames to 8 and the motion is on again.
+70. **Noise.** On link A, set Source to "Random noise". The note under
+    Drive says every frame draws fresh noise, so the drive does nothing.
+    The strip's frames are all different (the noise boils), and frame 0 is
+    the sprite on the sheet.
+71. **Old fold.** On link A, set Fold to "Old app, exact (v1)". Frames is
+    greyed out, the note says "Animation needs the corrected fold (v2)",
+    and the inspector's Frames row is amber: "16 (off: the old fold (v1)
+    has no animation)".
+72. **Link.** On link D, "Copy link", and paste it into a new tab: the same
+    sheet, with Motion "Spin" and Drive "Spin · the field turns".

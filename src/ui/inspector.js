@@ -6,10 +6,15 @@
    cells (orbits) once its groups are added to the outer tiers', so each
    tier's share of the repetition can be read off. With tiers on, the
    guaranteed symmetry is the tiered sprite's group, which can be more than
-   the Symmetry setting. Tiers or a tier field that are off say why. */
+   the Symmetry setting. Tiers or a tier field that are off say why.
+   Animated (M6a): the frames as a strip under the preview (free frames,
+   the ones that hold new cells, outlined), each frame's group, the free
+   frames and cells, and the fit: how much of the drive the motion
+   overrides. The preview and the rows above them describe frame 0. */
 import { groupById, orbitTable } from '../core/groups2d.js';
 import { tierFieldState } from '../core/tierfields.js';
 import { tierReadout } from '../recipe/tiers.js';
+import { animationReadout, frameGroupText } from '../recipe/motion.js';
 import { imageToCanvas } from '../raster/png.js';
 
 /**
@@ -26,7 +31,9 @@ export function mountInspector(root, { onCopyRecipe, onExport, onLock, onReroll,
   root.append(title, body);
 
   return {
-    /** @param {null | { index, seed, sprite, gen, paletteSeed, aut, image, locked, differs:string[] }} info */
+    /** @param {null | { index, seed, sprite, gen, paletteSeed, aut, image, locked, differs:string[],
+     *                   frames:Image[]|null, fit:number|null }} info
+     *  frames: every frame's image when the sprite is animated; fit: generateFrames' fit */
     show(info){
       body.innerHTML = '';
       if (!info){
@@ -61,8 +68,14 @@ export function mountInspector(root, { onCopyRecipe, onExport, onLock, onReroll,
       row('Symmetry', req.name);
       if (eff.id !== req.id) row('Effective', `${eff.name} (a ${sprite.w}×${sprite.h} grid is not square)`, 'reduced');
       const tiers = tierReadout(gen);
-      const sure = tiers?.on ? groupById(tiers.group) : eff;
+      let sure = tiers?.on ? groupById(tiers.group) : eff;
       if (sure.id !== eff.id) row('With tiers', `${sure.name} (the tiers add symmetry)`);
+      const anim = animationReadout(gen);
+      const frame0 = anim?.on ? groupById(anim.frameGroups[0]) : null;
+      if (frame0 && frame0.id !== sure.id){
+        row('With motion', `${frame0.name} (the motion adds symmetry to frame 0)`);
+        sure = frame0;
+      }
       const extra = info.aut > sure.order ? ' · more than asked for' : '';
       row('Symmetries', `${info.aut} of ${sprite.w === sprite.h ? 8 : 4} (guaranteed ${sure.order})${extra}`);
       row('Chiral', eff.chiral ? 'yes: has a distinct mirror twin' : 'no');
@@ -83,7 +96,38 @@ export function mountInspector(root, { onCopyRecipe, onExport, onLock, onReroll,
         row('Free cells', `${free} of ${sprite.w * sprite.h}` + (tiers?.on ? ` (${tiers.plain} without tiers)` : ''));
       const field = tierFieldState(gen);
       if (field.id !== 'none') row('Tier field', field.on ? field.id : `${field.id} (off: ${field.reason})`, field.on ? '' : 'reduced');
+      if (anim && !anim.on) row('Frames', `${anim.frames} (off: ${anim.reason})`, 'reduced');
+      if (anim?.on){
+        row('Frames', `${anim.T} · ` + (anim.driven ? `drive ${anim.drive} ${anim.amount}` : 'fresh noise every frame'));
+        if (anim.motion) row('Motion', anim.motion.on ? anim.motion.text : `${anim.motion.text} (off: ${anim.motion.reason})`,
+                             anim.motion.on ? '' : 'reduced');
+        row('Free frames', `${anim.freeFrames} of ${anim.T}`);
+        row('All frames', `${anim.orbits.toLocaleString('en-US')} free cells of ${(anim.T * sprite.w * sprite.h).toLocaleString('en-US')}` +
+                          (anim.motion?.on ? ` (${anim.still.toLocaleString('en-US')} without the motion)` : ''));
+        row('Frame groups', frameGroupText(anim.frameGroups));
+        if (info.fit !== null)
+          row('Fit', `the motion overrides ${Math.round(info.fit * 100)}% of the ${anim.driven ? 'drive' : 'noise'}` +
+                     (anim.matches ? ' (the drive turns with it)' : ''));
+      }
       row('Recipe', sprite.recipeText, 'recipe-text');
+
+      let strip = null;
+      if (info.frames && anim?.on){
+        strip = document.createElement('div');
+        strip.className = 'strip';
+        const k = Math.max(1, Math.floor(40 / Math.max(sprite.w, sprite.h)));
+        info.frames.forEach((image, t) => {
+          const fig = document.createElement('figure');
+          if (anim.frameFree[t]) fig.className = 'free';
+          fig.title = `Frame ${t}: ${groupById(anim.frameGroups[t]).name}` +
+                      (anim.frameFree[t] ? '' : ' · every cell is a copy of an earlier frame');
+          const fc = imageToCanvas(image);
+          fc.style.width = `${sprite.w * k}px`; fc.style.height = `${sprite.h * k}px`;
+          const cap = document.createElement('figcaption'); cap.textContent = String(t);
+          fig.append(fc, cap);
+          strip.append(fig);
+        });
+      }
 
       const cells = document.createElement('div');
       cells.className = 'buttons';
@@ -111,7 +155,7 @@ export function mountInspector(root, { onCopyRecipe, onExport, onLock, onReroll,
       b2.title = 'This sprite alone, at the sheet scale';
       b2.addEventListener('click', onExport);
       bar.append(b1, b2);
-      body.append(preview, cells, dl, bar);
+      body.append(...[preview, strip, cells, dl, bar].filter(Boolean));
     },
   };
 }

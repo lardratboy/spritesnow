@@ -170,3 +170,63 @@ export const TIER_FIELD_CASES = [
   { w:15, h:15, symmetry:'none',     tiers:'3 copy:rot90 / 5' },
   { w:16, h:12, symmetry:'mirror-x', tiers:'4x4 / 4x3 quadrant' },
 ];
+
+/* ----------------------------------------------------- animated fixtures (M6a)
+   Animations have no oracle either, so golden-frames.json pins the port's
+   output (`npm run golden:frames`), with the same rule. The cases are the
+   §5.3 table's motions, each drive and both signs, an odd size, a
+   rectangle, two elements, and a tiered sprite with a tier field (whose
+   non-quarter spin reads wrapped cells). */
+export const FRAME_CASES = [
+  { w:16, h:16, symmetry:'none',     frames:16, motion:'',              drive:'phase', driveAmount:1 },
+  { w:16, h:16, symmetry:'none',     frames:16, motion:'id +1/2',       drive:'phase', driveAmount:2 },
+  { w:16, h:16, symmetry:'none',     frames:16, motion:'id ~',          drive:'drift', driveAmount:2 },
+  { w:16, h:16, symmetry:'none',     frames:16, motion:'rot90 +1/4',    drive:'spin',  driveAmount:1 },
+  { w:16, h:16, symmetry:'none',     frames:16, motion:'rot90 +1/2',    drive:'phase', driveAmount:1 },
+  { w:16, h:16, symmetry:'none',     frames:16, motion:'rot180 +1/2',   drive:'spin',  driveAmount:-1 },
+  { w:16, h:16, symmetry:'none',     frames:16, motion:'mirror-x +1/2', drive:'drift', driveAmount:1 },
+  { w:16, h:16, symmetry:'none',     frames:16, motion:'mirror-x ~',    drive:'phase', driveAmount:1 },
+  { w:16, h:16, symmetry:'mirror-x', frames:16, motion:'rot90 +1/4',    drive:'spin',  driveAmount:1 },
+  { w:15, h:15, symmetry:'rot90',    frames:8,  motion:'mirror-x +1/2', drive:'spin',  driveAmount:-1 },
+  { w:16, h:12, symmetry:'mirror-y', frames:12, motion:'mirror-x +1/3', drive:'phase', driveAmount:2 },
+  { w:9,  h:9,  symmetry:'diagonals', frames:6, motion:'id ~, mirror-y +1/2', drive:'drift', driveAmount:-2 },
+  { w:16, h:16, symmetry:'rot90',    frames:8,  motion:'rot180 ~1',     drive:'spin',  driveAmount:1,
+    tiers:'4 / 4 mirror-x', tierField:'wreath' },
+];
+
+/** Every animated fixture: case × source × seed, as a port gen (fold 2). */
+export function frameFixtureList(){
+  const out = [];
+  for (const c of FRAME_CASES)
+    for (const src of SOURCES)
+      for (const seed of SEEDS){
+        const cfg = { ...REFERENCE_CFG, ...src.cfg, symmetry:'none', sw:c.w, sh:c.h };
+        const { w, h, ...rest } = c;
+        out.push({
+          name: `${c.symmetry}/${w}x${h}/T${c.frames}/${c.motion || '-'}/${c.drive} ${c.driveAmount}` +
+                `${c.tiers ? `/${c.tiers}/tf:${c.tierField}` : ''}/${src.name}/${hex8(seed)}`,
+          seed,
+          gen: { ...genFromLegacyCfg(cfg), fold:2, tiers:'', tierField:'none', ...rest },
+        });
+      }
+  return out;
+}
+
+/** spriteDigest over every frame of an animation, in order. */
+export function framesDigest(sprite){
+  const { w, h, frames } = sprite, F = w * h;
+  const cells = new Uint8Array(F * frames.length);
+  let filled = 0;
+  frames.forEach((grid, t) => {
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++){
+      const v = grid[y][x];
+      cells[t*F + y*w + x] = v;
+      if (v) filled++;
+    }
+  });
+  return {
+    frames: fnv(cells),
+    colors: fnv(new TextEncoder().encode(sprite.colors.join(','))),
+    count: frames.length, filled,
+  };
+}

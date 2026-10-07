@@ -14,6 +14,8 @@ import { MASKS } from '../core/masks.js';
 import { hash32 } from '../core/rng.js';
 import { TIER_FIELDS } from '../core/tierfields.js';
 import { canonicalTiers } from './tiers.js';
+import { canonicalMotion } from './motion.js';
+import { DRIVES, MAX_FRAMES } from '../core/spacetime.js';
 
 export const FORMAT = 'spritesnow/1';
 
@@ -31,6 +33,10 @@ export const DEFAULT_RECIPE = Object.freeze({
     fold: 2,                // 1 = reproduce the old fold, defects included
     tiers: '',              // recipe/tiers.js: '' (off), or e.g. '4 / 4 mirror-x' (fold 2 only)
     tierField: 'none',      // core/tierfields.js TIER_FIELDS id; acts only while tiers are on
+    frames: 1,              // core/spacetime.js: 1 is a still; more is an animation (fold 2 only)
+    motion: '',             // recipe/motion.js: '' (off), or e.g. 'rot90 +1/4' (spin)
+    drive: 'phase',         // how time enters the field: 'phase' | 'spin' | 'drift'
+    driveAmount: 1,         // cycles, turns or radius per loop
     bpc: 3, ncol: 4, colorMode: 'bands', sortLum: true,
   }),
   sheet: Object.freeze({ cols: 8, rows: 6, spacing: 2, scale: 4 }),
@@ -46,6 +52,7 @@ export const SETTING_LABELS = {
   'gen.ca':'CA smooth', 'gen.mask':'Mask', 'gen.maskScale':'Mask size', 'gen.maskInvert':'Mask invert',
   'gen.outline':'Outline', 'gen.w':'Width', 'gen.h':'Height', 'gen.symmetry':'Symmetry', 'gen.fold':'Fold',
   'gen.tiers':'Tiers', 'gen.tierField':'Tier field',
+  'gen.frames':'Frames', 'gen.motion':'Motion', 'gen.drive':'Drive', 'gen.driveAmount':'Drive amount',
   'gen.bpc':'Gamut', 'gen.ncol':'Colours', 'gen.colorMode':'Colour mode', 'gen.sortLum':'Sort by luminance',
   'sheet.cols':'Columns', 'sheet.rows':'Rows', 'sheet.spacing':'Spacing', 'sheet.scale':'Scale',
 };
@@ -65,6 +72,7 @@ export const GEN_SPEC = {
   w: num(2, 64, true), h: num(2, 64, true),
   symmetry: oneOf(SUBGROUPS.map(g => g.id)), fold: oneOf([1, 2]), tiers: str,
   tierField: oneOf(TIER_FIELDS.map(f => f.id)),
+  frames: num(1, MAX_FRAMES, true), motion: str, drive: oneOf(DRIVES), driveAmount: num(-16, 16, true),
   bpc: oneOf([1, 2, 3, 4, 8]), ncol: num(1, 16, true), colorMode: oneOf(['bands', 'cycle', 'solid']), sortLum: bool,
 };
 export const SHEET_SPEC = {
@@ -94,13 +102,14 @@ const coerceAll = (spec, input, defaults) => {
 const u32 = (v, fallback) => Number.isFinite(Number(v)) && v !== null && v !== '' ? Number(v) >>> 0 : fallback;
 
 /** A generator settings object with every key valid. fold:1 is only kept for
- *  groups the old app had (newdesign.md D2). Tiers are written in their
- *  canonical form; tiers that do not fit (or cannot be read) are kept, and
- *  are only off (tierState says why). */
+ *  groups the old app had (newdesign.md D2). Tiers and motion are written in
+ *  their canonical form; ones that do not fit (or cannot be read) are kept,
+ *  and are only off (tierState and motionState say why). */
 export function normalizeGen(gen){
   const g = coerceAll(GEN_SPEC, gen, DEFAULT_RECIPE.gen);
   if (g.fold === 1 && !groupById(g.symmetry).legacy) g.fold = 2;
   g.tiers = canonicalTiers(g.tiers);
+  g.motion = canonicalMotion(g.motion);
   return g;
 }
 

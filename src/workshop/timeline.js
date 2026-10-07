@@ -45,7 +45,7 @@ export function diffLabel(prev, next){
   if (changed.length > 3) return `${changed.length} settings changed`;
   return changed.map(path => {
     const [part, k] = path.split('.');
-    const fmt = v => typeof v === 'boolean' || (path === 'gen.tiers' && !v) ? (v ? 'on' : 'off')
+    const fmt = v => typeof v === 'boolean' || ((path === 'gen.tiers' || path === 'gen.motion') && !v) ? (v ? 'on' : 'off')
                    : FRACTIONAL.has(path) ? Number(v).toFixed(2)
                    : String(v).length > 14 ? String(v).slice(0, 14) + '…' : String(v);
     return `${LABELS[path]} ${fmt(prev[part][k])} → ${fmt(next[part][k])}`;

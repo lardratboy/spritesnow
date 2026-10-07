@@ -9,9 +9,11 @@
      cells whose sprite changed are redrawn, in place.
    - blockEdges gives the view's block grid (M5c): where each tiered
      sprite's blocks meet, placed as the raster places the sprite.
+   - An animated sprite (M6a) is built only up to frame 0, which is what
+     the sheet shows until M6b; framesOf builds every frame.
    Pure: no DOM, so Node tests check every build against a fresh one. */
 import { cellSettings } from '../recipe/schema.js';
-import { generateSprite } from '../core/generate.js';
+import { generateFrames } from '../core/generate.js';
 import { parseTiers, tierLayout } from '../core/tiers.js';
 import { paletteFor } from '../core/palette.js';
 import { rasterizeSheet, redrawCells } from '../raster/rasterize.js';
@@ -39,10 +41,24 @@ export function cachedSprite(cache, seed, gen, paletteSeed){
   const key = `${seed}|${paletteSeed}|${g}`, map = cache.map;
   let s = map.get(key);
   if (s){ map.delete(key); map.set(key, s); return s; }      // most recently used goes last
-  s = generateSprite(seed, gen, paletteFor(paletteSeed, gen.bpc));
+  s = generateFrames(seed, gen, paletteFor(paletteSeed, gen.bpc), { count: 1 });
   cache.generated++;
   map.set(key, s);
   if (map.size > cache.limit) map.delete(map.keys().next().value);
+  return s;
+}
+
+/** Every frame of a cell's animation (a still is one frame), kept for the
+ *  last few sprites asked for, so re-showing the inspector costs nothing. */
+const framesCache = new Map();
+export function framesOf(seed, gen, paletteSeed){
+  const key = `${seed}|${paletteSeed}|${JSON.stringify(gen)}`;
+  let s = framesCache.get(key);
+  if (!s){
+    if (framesCache.size >= 8) framesCache.delete(framesCache.keys().next().value);
+    s = generateFrames(seed, gen, paletteFor(paletteSeed, gen.bpc));
+    framesCache.set(key, s);
+  }
   return s;
 }
 

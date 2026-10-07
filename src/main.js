@@ -12,7 +12,9 @@
    (workshop/sheet.js). Exports rasterise at the scale on demand.
    The view draws the sprites with WebGL2 (ui/gl-sheet.js), or the scale-1
    canvas when it cannot; ?gl=0 in the URL forces the canvas. The block
-   grid (G) is a view setting: it is not in the recipe or the timeline. */
+   grid (G) is a view setting: it is not in the recipe or the timeline.
+   An animated sprite (M6a) shows frame 0 on the sheet; the inspector shows
+   every frame of the selected one, as a strip. */
 import { normalize, cellSettings, resizeSheet, soloRecipe } from './recipe/schema.js';
 import { encode, decode } from './recipe/permalink.js';
 import { aut } from './core/groups2d.js';
@@ -24,7 +26,7 @@ import { averageHash } from './workshop/frame-hash.js';
 import { isLocked, toggleLock, rerollCell, reseedUnlocked, lockedDifferences } from './workshop/cells.js';
 import { keep, rename, remove, move, restore, packGrid } from './workshop/collection.js';
 import { saveSession, readSession } from './workshop/session.js';
-import { createSpriteCache, cachedSprite, buildSheet, sheetLayout, sheetAtScale } from './workshop/sheet.js';
+import { createSpriteCache, cachedSprite, buildSheet, sheetLayout, sheetAtScale, framesOf } from './workshop/sheet.js';
 import { mountControls } from './ui/controls.js';
 import { mountSheetView } from './ui/sheet-view.js';
 import { mountInspector } from './ui/inspector.js';
@@ -69,9 +71,12 @@ function render(){
 function showInspector(){
   if (selected < 0) return inspector.show(null);
   const sprite = sheet.sprites[selected], c = cellSettings(recipe, selected);
+  const anim = c.gen.frames > 1 ? framesOf(c.seed, c.gen, c.paletteSeed) : null;
   inspector.show({
     index: selected, seed: c.seed, sprite, gen: c.gen, paletteSeed: c.paletteSeed,
     aut: aut(sprite.grid, sprite.w, sprite.h), image: rasterizeSolo(sprite, { scale: 1 }),
+    frames: anim && anim.T > 1 ? anim.frames.map(grid => rasterizeSolo({ ...anim, grid }, { scale: 1 })) : null,
+    fit: anim ? anim.fit : null,
     locked: isLocked(recipe, selected), differs: lockedDifferences(recipe, selected),
   });
 }
@@ -174,7 +179,12 @@ const timelineView = mountTimelineView($('timeline'), {
 });
 
 /* --------------------------------------------------------------- actions */
+/** One setting, or several at once when `key` is a patch object (one
+ *  timeline entry either way). */
 function change(part, key, value){
+  if (typeof key === 'object'){
+    return apply(normalize({ ...recipe, [part]: { ...recipe[part], ...key } }), `set:${part}.${Object.keys(key).join('+')}`);
+  }
   let next;
   if (part === 'sheet' && (key === 'cols' || key === 'rows')){
     const cols = key === 'cols' ? value : recipe.sheet.cols, rows = key === 'rows' ? value : recipe.sheet.rows;

@@ -4,15 +4,21 @@
    when a non-square sprite reduces the group (D3).
    The Tiers section (newdesign.md §5.2, M5a) is built by mountTiers below,
    because its rows depend on the size and the split. Its last row is the
-   tier field (M5b), shown while tiers are on or a field is set. */
+   tier field (M5b), shown while tiers are on or a field is set.
+   The Animation section (newdesign.md §5.3, M6a) is table rows (Frames,
+   Drive, Amount) with two slots built by mountAnimation: the motion
+   picker, and the notes under the drive. */
 import { FIELDS } from '../core/fields.js';
 import { MASKS } from '../core/masks.js';
 import { SUBGROUPS, groupById, effectiveGroup, orbitTable } from '../core/groups2d.js';
 import { cachedTieredTable } from '../core/tiers.js';
 import { TIER_FIELDS, tierFieldState } from '../core/tierfields.js';
 import { parseTiers, printTiers, tierState, factorizations, withSplit } from '../recipe/tiers.js';
+import { MOTION_PRESETS, ELEMENT_CHOICES, TIME_CHOICES, parseMotion, printMotion, animationReadout }
+  from '../recipe/motion.js';
 
 const notNoise = g => g.source !== 'noise';
+const animated = g => g.frames > 1;
 const SECTIONS = [
   { title: 'Generator', rows: [
     { key:'source', type:'select', label:'Source',
@@ -42,6 +48,14 @@ const SECTIONS = [
     { key:'fold', type:'select', label:'Fold', numeric:true,
       options:[[2, 'Corrected (v2)'], [1, 'Old app, exact (v1)']] },
   ]},
+  { title: 'Animation', rows: [
+    { key:'frames', type:'number', label:'Frames', min:1, max:64 },
+    { type:'slot', key:'motion' },
+    { key:'drive', type:'select', label:'Drive', show: animated,
+      options:[['phase','Phase · the bands flow'], ['spin','Spin · the field turns'], ['drift','Drift · the field circles']] },
+    { key:'driveAmount', type:'number', label:'Amount', min:-16, max:16, show: animated },
+    { type:'slot', key:'notes' },
+  ]},
   { title: 'Palette', rows: [
     { key:'bpc', type:'select', label:'Gamut', numeric:true,
       options:[[1,'1-bit'], [2,'2-bit'], [3,'3-bit'], [4,'4-bit'], [8,'8-bit']] },
@@ -60,7 +74,7 @@ const SECTIONS = [
 
 /**
  * @param {HTMLElement} root
- * @param {{ onChange:(part:string, key:string, value:any) => void,
+ * @param {{ onChange:(part:string, key:string|object, value?:any) => void,   key may be a patch of several keys
  *           onAction:(name:string) => void,
  *           onLoad:(file:File) => void }} handlers
  * @returns {{ update:(recipe:object) => void }}
@@ -68,12 +82,14 @@ const SECTIONS = [
 export function mountControls(root, { onChange, onAction, onLoad }){
   const inputs = [];   // { row, part, el, readout }
   const tiersBox = mountTiers(text => onChange('gen', 'tiers', text), id => onChange('gen', 'tierField', id));
+  const anim = mountAnimation(patch => onChange('gen', patch));
 
   for (const section of SECTIONS){
     const part = section.part || 'gen';
     const box = el('div', 'group');
     box.append(el('div', 'title', section.title));
     for (const row of section.rows){
+      if (row.type === 'slot'){ box.append(anim[row.key]); continue; }
       const id = `c-${part}-${row.key}`;
       const line = el('div', 'row');
       let input, readout = null;
@@ -170,6 +186,9 @@ export function mountControls(root, { onChange, onAction, onLoad }){
       if (eff.reduced)
         note.textContent = `A ${g.w}×${g.h} sprite is not square, so this becomes ${groupById(eff.id).name}.`;
       tiersBox.update(g);
+      // animation needs the corrected fold, as tiers do
+      inputs.find(i => i.row.key === 'frames').el.disabled = g.fold !== 2;
+      anim.update(g);
     },
   };
 }
@@ -299,6 +318,122 @@ function mountTiers(setTiers, setField){
       if (k === key) return;
       key = k;
       const focused = box.contains(document.activeElement) ? document.activeElement.id : null;
+      build();
+      if (focused && document.getElementById(focused)) document.getElementById(focused).focus();
+    },
+  };
+}
+
+/* -------------------------------------------------------------- animation
+   Motion: a preset from §5.3's table, or Custom, which shows up to two
+   element and time pickers (more rows if the motion has more elements).
+   Choosing a preset whose turn a drive already has offers that drive.
+   The notes say what the drive does, why a motion is off, and how many
+   frames and cells are free. */
+const CUSTOM = '__custom';
+const DRIVE_HINTS = {
+  phase: 'The threshold slides through Amount cycles per loop, so the bands flow.',
+  spin: 'The field turns Amount whole turns per loop, clockwise when positive.',
+  drift: 'The field\'s offsets travel round a circle of radius Amount.',
+};
+const fmt = n => n.toLocaleString('en-US');
+
+function mountAnimation(setGen){
+  const motion = el('div'), notes = el('div');
+  const preset = el('select');
+  preset.id = 'c-gen-motion';
+  fill(preset, [...MOTION_PRESETS.map(p => [p.motion, p.name]), [CUSTOM, 'Custom…']]);
+  const presetRow = labelled('Motion', preset);
+  const presetHint = el('div', 'hint');
+  const pickers = el('div');
+  motion.append(presetRow, presetHint, pickers);
+  const driveHint = el('div', 'hint'), note = el('div', 'hint'), suggest = el('div', 'hint'), summary = el('div', 'hint tier-sum');
+  notes.append(driveHint, suggest, note, summary);
+
+  let gen = null, key = '', custom = false;
+  preset.addEventListener('change', () => {
+    custom = preset.value === CUSTOM;
+    if (custom) build(); else setGen({ motion: preset.value });
+  });
+
+  function build(){
+    const g = gen, text = String(g.motion || '').trim();
+    const r = animationReadout(g);
+    const show = g.frames > 1 || !!text;
+    motion.classList.toggle('hidden', !show);
+    const known = MOTION_PRESETS.find(p => p.motion === text);
+    if (!known) custom = true;
+    preset.value = custom ? CUSTOM : text;
+    presetHint.textContent = !custom && known ? known.hint : 'Each element turns or mirrors the frames, and moves them in time.';
+
+    // custom pickers: one row per element, at least two
+    pickers.innerHTML = '';
+    if (custom){
+      const els = parseMotion(text).motion || [];
+      const rows = Math.max(2, els.length);
+      for (let i = 0; i < rows; i++){
+        const m = els[i];
+        const e = el('select'), t = el('select');
+        e.id = `c-motion-${i}-element`; t.id = `c-motion-${i}-time`;
+        fill(e, [['', '—'], ...ELEMENT_CHOICES]);
+        const time = m ? printMotion([m]).split(' ')[1] : '+1/2';
+        fill(t, [...TIME_CHOICES, ...(TIME_CHOICES.some(([v]) => v === time) ? [] : [[time, time]])]);
+        e.value = m ? m.name : ''; t.value = time;
+        t.disabled = !m;
+        const change = () => {
+          const list = [];
+          pickers.querySelectorAll('.motion-el').forEach(row => {
+            const [se, st] = row.querySelectorAll('select');
+            if (se.value) list.push(`${se.value} ${st.value}`);
+          });
+          setGen({ motion: list.join(', ') });
+        };
+        e.addEventListener('change', change); t.addEventListener('change', change);
+        const line = labelled(`Element ${i + 1}`, e);
+        line.classList.add('motion-el');
+        line.append(t);
+        pickers.append(line);
+      }
+    }
+
+    // notes
+    const noise = g.source === 'noise';
+    driveHint.textContent = !r || !r.on ? '' : noise
+      ? 'Random noise has no field: every frame draws fresh noise, so the drive does nothing.'
+      : DRIVE_HINTS[g.drive];
+    suggest.innerHTML = '';
+    if (r?.on && r.motion?.on && !noise){
+      if (r.matches) suggest.textContent = r.addsSymmetry
+        ? 'The drive already turns with this motion, but the motion also gives the frames more symmetry than the drive has, so it still overrides part of it.'
+        : 'The drive already turns with this motion, so the motion only corrects rounding.';
+      else if (r.suggestion){
+        const { drive, amount } = r.suggestion;
+        suggest.append(`The ${drive} drive with Amount ${amount} matches this motion. `,
+                       button(`Use ${drive} ${amount}`, () => setGen({ drive, driveAmount: amount })));
+      }
+    }
+    note.className = 'hint';
+    note.textContent = '';
+    if (g.fold !== 2 && g.frames > 1) note.textContent = 'Animation needs the corrected fold (v2).';
+    else if (r && !r.on) note.textContent = `Animation off: ${r.reason}.`;
+    else if (r?.motion && !r.motion.on) note.textContent = `Motion off: ${r.motion.reason}.`;
+    else if (!r && text) note.textContent = 'Motion off: a still has no motion: set Frames above 1.';
+    if (note.textContent) note.classList.add('warn');
+    summary.textContent = r?.on
+      ? `${r.freeFrames} of ${r.T} frames free · ${fmt(r.orbits)} free cells` +
+        (r.motion?.on ? ` (${fmt(r.still)} without the motion)` : '') + '. The sheet shows frame 0; the inspector shows every frame.'
+      : g.frames <= 1 ? 'One frame is a still. More frames make an animation.' : '';
+  }
+
+  return {
+    motion, notes,
+    update(g){
+      gen = g;
+      const k = JSON.stringify([g.frames, g.motion, g.drive, g.driveAmount, g.w, g.h, g.symmetry, g.fold, g.tiers,
+                                g.source === 'noise', custom]);
+      if (k === key) return;
+      key = k;
+      const focused = motion.contains(document.activeElement) ? document.activeElement.id : null;
       build();
       if (focused && document.getElementById(focused)) document.getElementById(focused).focus();
     },
