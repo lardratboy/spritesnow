@@ -40,12 +40,18 @@ each milestone step:
 2. Work until `npm test` is green. Commit with a descriptive message that
    says what changed, how it was verified, and whether goldens changed
    (normally "No golden changes").
-3. Fast-forward `main` to the branch (`git merge --ff-only`), then push
-   both `main` and the branch to `origin`.
+3. Fast-forward `main` to the branch (`git merge --ff-only`), push `main`
+   to `origin`, then delete the step branch with `git branch -d <branch>`
+   (`-d` refuses unless `main` holds every commit). Step branches are
+   local only: never push them, so `origin` keeps just `main`.
 4. Tell the user what was pushed (commit hash, test count).
 
-Still ask first before anything destructive or irreversible: force-push,
-rewriting history, or deleting a branch on GitHub.
+The user wants a tidy repo: one branch, `main`, here and on GitHub.
+`.claude/settings.json` allows `git branch -d` and
+`git push origin --delete` without asking; run them as plain commands
+(no pipes) so they match. Still ask first before anything destructive or
+irreversible: force-push, rewriting history, `git branch -D`, or deleting
+a branch that is not merged.
 
 Branch names must not differ only by case, and must not collide with an
 existing branch's folder (`m0` vs `M0`). The user's Mac filesystem is
