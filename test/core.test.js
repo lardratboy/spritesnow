@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { loadReference, referenceSource, REFERENCE_EXPORTS } from './load-reference.js';
-import { fixtureList, spriteDigest, fnv, PALETTE_SEED, SEEDS } from './fixtures.js';
+import { fixtureList, spriteDigest, fnv, PALETTE_SEED, SEEDS, legacyExact } from './fixtures.js';
 import { mulberry32 } from '../src/core/rng.js';
 import { FIELDS, popcount, digitSum, pascalMod } from '../src/core/fields.js';
 import { MASKS } from '../src/core/masks.js';
@@ -91,4 +91,16 @@ test('M1: generateSprite is deterministic across calls', () => {
     assert.deepEqual(spriteDigest(portSprite(f)), spriteDigest(portSprite(f)), f.name);
 });
 
-test.todo('M1b: generateSprite with fold:2 matches the golden wherever the old fold was exact');
+test('M1b: generateSprite with fold:2 matches the golden wherever the old fold was exact', () => {
+  let checked = 0;
+  for (const f of fixtures){
+    const gen = { ...genFromLegacyCfg(f.cfg), fold: 2 };
+    if (!legacyExact(gen.symmetry, gen.w, gen.h)) continue;
+    checked++;
+    const s = generateSprite(f.seed, gen, paletteFor(PALETTE_SEED, f.cfg.bpc));
+    assert.deepEqual(spriteDigest(s), golden.sprites[f.name], f.name);
+  }
+  // none, horizontal, vertical, quadrant at all 8 sizes; rot180 at the 4 even heights;
+  // rot90 at the 2 even squares; diagonal at the 5 squares: 43 grids x 7 sources x 4 seeds
+  assert.equal(checked, 43 * 7 * 4);
+});

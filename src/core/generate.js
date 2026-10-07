@@ -7,7 +7,9 @@
    The one structural change: the final symmetric copy goes through
    groups2d.orbitTable() (a cell -> seed-cell lookup) instead of the old
    fold() switch. With fold:1 the lookup IS the old fold, so output is byte
-   identical to the reference; core.test.js holds every golden to that. */
+   identical to the reference; core.test.js holds every golden to that.
+   With fold:2 the lookup is the group engine's: symmetric by construction,
+   and identical to the reference wherever the old fold was correct. */
 import { mulberry32 } from './rng.js';
 import { FIELDS, FIELD_BY_ID } from './fields.js';
 import { MASKS, MASK_BY_ID, blobMask } from './masks.js';
@@ -38,7 +40,10 @@ export function compileExpr(expr){
  * @param {object} gen   generator settings (recipe/schema.js DEFAULT_RECIPE.gen)
  * @param {string[]} palette  from palette.paletteFor()
  * @returns {{ grid:Uint8Array[], colors:string[], w:number, h:number,
- *             symmetry:string, fold:number, recipeText:string }}
+ *             symmetry:string, effectiveSymmetry:string, fold:number,
+ *             recipeText:string }}
+ * effectiveSymmetry differs from symmetry when a non-square grid cannot
+ * hold the whole group (newdesign.md D3); the UI must show it.
  */
 export function generateSprite(seed, gen, palette){
   const rnd = mulberry32(seed);
@@ -155,5 +160,5 @@ export function generateSprite(seed, gen, palette){
       (fid==='conic' ? ` · [${p.a},${p.b},${p.c},${p.d},${p.e}]` : '') +
       ` · mask ${mid}${maskInvert?'⁻¹':''} · ${symLabel}`;
 
-  return { grid, colors:paint, w, h, symmetry, fold, recipeText };
+  return { grid, colors:paint, w, h, symmetry, effectiveSymmetry: table.effective.id, fold, recipeText };
 }

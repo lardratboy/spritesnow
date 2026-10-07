@@ -36,9 +36,13 @@ No bundler, no `node_modules`.
 - Symmetry is decided **once per orbit**, at the orbit's representative.
   - With `fold: 1`, the representative is the one the old `fold()` chooses,
     which reproduces old sprites, defects included.
-  - With `fold: 2` (the default for new recipes), the representative is the
-    legacy choice wherever that choice was correct, and the lexicographic
-    minimum otherwise.
+  - With `fold: 2` (the default for new recipes), the representative is
+    chosen per orbit: the legacy choice wherever it was correct for that
+    orbit, otherwise the first orbit member inside the seed rectangle by
+    row, then column.
+  - Generation always evaluates a seed RECTANGLE in row-major order, because
+    the RNG is consumed in that order. For every legacy group it is the old
+    `seedDims` rectangle; changing it changes every sprite.
 - `aut()` counts the symmetries of a finished sprite. Tests require
   `aut >= |G|` for every group at every size.
 - On a non-square grid the effective group is `G ∩ Aut(grid)`. The UI shows

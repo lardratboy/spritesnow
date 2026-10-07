@@ -86,3 +86,25 @@ export function fnv(bytes){
   for (let i = 0; i < bytes.length; i++){ h ^= bytes[i]; h = Math.imul(h, 0x01000193) >>> 0; }
   return h.toString(16).padStart(8, '0');
 }
+
+/* ------------------------------------------------- where the old fold was right
+   Computed from first principles (orbits by brute force), not from the
+   engine, so tests can hold the engine to it. The old fold is EXACT on a
+   grid when the group fits the grid unreduced and, for every cell, the old
+   fold sends the whole orbit to one cell that is itself in the orbit. */
+import { groupById, effectiveGroup, applyElement, legacyFold } from '../src/core/groups2d.js';
+
+export function legacyExact(groupId, w, h){
+  const g = groupById(groupId), eff = effectiveGroup(groupId, w, h);
+  if (!g.legacy || eff.reduced) return false;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++){
+    const orbit = eff.els.map(e => applyElement(e, x, y, w, h));
+    const [fx, fy] = legacyFold(x, y, w, h, g.legacy);
+    if (!orbit.some(([a, b]) => a === fx && b === fy)) return false;
+    for (const [a, b] of orbit){
+      const [gx, gy] = legacyFold(a, b, w, h, g.legacy);
+      if (gx !== fx || gy !== fy) return false;
+    }
+  }
+  return true;
+}
