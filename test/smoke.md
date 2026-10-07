@@ -1,4 +1,4 @@
-# Browser smoke test (M2, M3a, M3b, M3c, M4a, M4b, M5a)
+# Browser smoke test (M2, M3a, M3b, M3c, M4a, M4b, M5a, M5b)
 
 What to check by hand after a change to the UI. About five minutes.
 
@@ -203,3 +203,45 @@ these links decode to these recipes and counts.
 47. **Link and timeline.** "Copy link" with tiers set, paste in a new tab:
     the same sheet and the same Tiers panel. In the timeline, the tier
     change is labelled "Tiers off → 4 / 4 mirror-x" (or similar).
+
+## Tier fields (M5b)
+
+A tier field changes what the motif (the base field) sees in each block
+(newdesign.md §5.2). It is the Field select at the bottom of the Tiers
+section. Each link below opens a D4 16×16 sheet with `4 / 4` tiers and
+the same seeds and palette, so only the field differs. `tierfields.test.js`
+checks that these links decode to these recipes.
+
+| Tiers | Field | Link |
+|---|---|---|
+| `4 / 4` | none | <http://localhost:8000/#r=eyJmIjoic3ByaXRlc25vdy8xIiwiZyI6eyJzeW1tZXRyeSI6ImRpaGVkcmFsIiwidGllcnMiOiI0IC8gNCJ9LCJwIjoxfQ> |
+| `4 / 4` | wreath | <http://localhost:8000/#r=eyJmIjoic3ByaXRlc25vdy8xIiwiZyI6eyJzeW1tZXRyeSI6ImRpaGVkcmFsIiwidGllcnMiOiI0IC8gNCIsInRpZXJGaWVsZCI6IndyZWF0aCJ9LCJwIjoxfQ> |
+| `4 / 4` | digit-swap | <http://localhost:8000/#r=eyJmIjoic3ByaXRlc25vdy8xIiwiZyI6eyJzeW1tZXRyeSI6ImRpaGVkcmFsIiwidGllcnMiOiI0IC8gNCIsInRpZXJGaWVsZCI6ImRpZ2l0LXN3YXAifSwicCI6MX0> |
+| `4 / 4` | prefix-hash | <http://localhost:8000/#r=eyJmIjoic3ByaXRlc25vdy8xIiwiZyI6eyJzeW1tZXRyeSI6ImRpaGVkcmFsIiwidGllcnMiOiI0IC8gNCIsInRpZXJGaWVsZCI6InByZWZpeC1oYXNoIn0sInAiOjF9> |
+| `4 / 4` | phasecell | <http://localhost:8000/#r=eyJmIjoic3ByaXRlc25vdy8xIiwiZyI6eyJzeW1tZXRyeSI6ImRpaGVkcmFsIiwidGllcnMiOiI0IC8gNCIsInRpZXJGaWVsZCI6InBoYXNlY2VsbCJ9LCJwIjoxfQ> |
+| `4 / 4` | cross | <http://localhost:8000/#r=eyJmIjoic3ByaXRlc25vdy8xIiwiZyI6eyJzeW1tZXRyeSI6ImRpaGVkcmFsIiwidGllcnMiOiI0IC8gNCIsInRpZXJGaWVsZCI6ImNyb3NzIn0sInAiOjF9> |
+| `4 / 4` | carry | <http://localhost:8000/#r=eyJmIjoic3ByaXRlc25vdy8xIiwiZyI6eyJzeW1tZXRyeSI6ImRpaGVkcmFsIiwidGllcnMiOiI0IC8gNCIsInRpZXJGaWVsZCI6ImNhcnJ5In0sInAiOjF9> |
+| `16` | wreath | <http://localhost:8000/#r=eyJmIjoic3ByaXRlc25vdy8xIiwiZyI6eyJzeW1tZXRyeSI6ImRpaGVkcmFsIiwidGllcnMiOiIxNiIsInRpZXJGaWVsZCI6IndyZWF0aCJ9LCJwIjoxfQ> |
+
+48. **Same colours.** Open the "none" link and then each field link. The
+    shapes change, but each sprite keeps its colours. Click a sprite: the
+    inspector's Recipe line is the same as with "none", plus
+    "· tier field wreath" (or whichever field) at the end.
+49. **Still symmetric.** Every sprite on every field link is D4-symmetric:
+    the inspector's Symmetries line reads "8 of 8 (guaranteed 8)".
+50. **Picker.** On the "none" link, choose Field → Wreath: the sheet
+    changes, the hint under the select describes the field, and the
+    timeline entry is labelled "Tier field none → wreath".
+51. **One tier.** The `16` link has a single tier, and the wreath still
+    acts: the whole motif is read turned or mirrored before the symmetry
+    copies it. Compared with the `4 / 4` "none" link (the same sprites,
+    since tiers without groups change nothing), most sprites differ (35 of
+    48); the rest drew a move their motif already looks the same under
+    (the identity, or a symmetry of the motif itself).
+52. **Off, not lost.** On the wreath link, set Across to Off. The Field
+    select stays, with an amber note: "Tier field off: it needs tiers that
+    are on." The sheet is the plain sheet. Set Across back to 4·4 and the
+    field comes back. With Source set to Random noise the note says
+    "Tier field off: random noise has no field."
+53. **Link.** "Copy link" with a field set, paste in a new tab: the same
+    sheet, with the same Field selected.

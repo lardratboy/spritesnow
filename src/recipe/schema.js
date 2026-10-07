@@ -12,6 +12,7 @@ import { SUBGROUPS, groupById } from '../core/groups2d.js';
 import { FIELDS } from '../core/fields.js';
 import { MASKS } from '../core/masks.js';
 import { hash32 } from '../core/rng.js';
+import { TIER_FIELDS } from '../core/tierfields.js';
 import { canonicalTiers } from './tiers.js';
 
 export const FORMAT = 'spritesnow/1';
@@ -29,6 +30,7 @@ export const DEFAULT_RECIPE = Object.freeze({
     symmetry: 'mirror-x',   // a groups2d SUBGROUPS id (legacy 'horizontal')
     fold: 2,                // 1 = reproduce the old fold, defects included
     tiers: '',              // recipe/tiers.js: '' (off), or e.g. '4 / 4 mirror-x' (fold 2 only)
+    tierField: 'none',      // core/tierfields.js TIER_FIELDS id; acts only while tiers are on
     bpc: 3, ncol: 4, colorMode: 'bands', sortLum: true,
   }),
   sheet: Object.freeze({ cols: 8, rows: 6, spacing: 2, scale: 4 }),
@@ -43,7 +45,7 @@ export const SETTING_LABELS = {
   'gen.stride':'Stride', 'gen.phase':'Phase', 'gen.coverage':'Coverage', 'gen.vary':'Vary per cell',
   'gen.ca':'CA smooth', 'gen.mask':'Mask', 'gen.maskScale':'Mask size', 'gen.maskInvert':'Mask invert',
   'gen.outline':'Outline', 'gen.w':'Width', 'gen.h':'Height', 'gen.symmetry':'Symmetry', 'gen.fold':'Fold',
-  'gen.tiers':'Tiers',
+  'gen.tiers':'Tiers', 'gen.tierField':'Tier field',
   'gen.bpc':'Gamut', 'gen.ncol':'Colours', 'gen.colorMode':'Colour mode', 'gen.sortLum':'Sort by luminance',
   'sheet.cols':'Columns', 'sheet.rows':'Rows', 'sheet.spacing':'Spacing', 'sheet.scale':'Scale',
 };
@@ -62,6 +64,7 @@ export const GEN_SPEC = {
   mask: oneOf([...MASKS.map(m => m.id), 'mix']), maskScale: num(0.4, 1.45), maskInvert: bool, outline: bool,
   w: num(2, 64, true), h: num(2, 64, true),
   symmetry: oneOf(SUBGROUPS.map(g => g.id)), fold: oneOf([1, 2]), tiers: str,
+  tierField: oneOf(TIER_FIELDS.map(f => f.id)),
   bpc: oneOf([1, 2, 3, 4, 8]), ncol: num(1, 16, true), colorMode: oneOf(['bands', 'cycle', 'solid']), sortLum: bool,
 };
 export const SHEET_SPEC = {

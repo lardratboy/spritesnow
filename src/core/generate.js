@@ -12,13 +12,17 @@
    and identical to the reference wherever the old fold was correct.
    With gen.tiers on (fold:2 only), the lookup is the tiered one
    (core/tiers.js): fewer, larger orbits over the same seed region, so the
-   RNG is consumed exactly as without tiers. */
+   RNG is consumed exactly as without tiers.
+   gen.tierField (core/tierfields.js) changes what the base field sees at a
+   cell, with constants hashed from the seed: the RNG stream, and so the
+   colours and params, are the same with it on or off. */
 import { mulberry32 } from './rng.js';
 import { FIELDS, FIELD_BY_ID } from './fields.js';
 import { MASKS, MASK_BY_ID, blobMask } from './masks.js';
 import { lum, darken } from './palette.js';
 import { SUBGROUPS, orbitTable } from './groups2d.js';
 import { tierState, cachedTieredTable, printTiers } from './tiers.js';
+import { tierFieldState, makeTierField } from './tierfields.js';
 
 /** Moduli the per-cell "vary" option picks from. Order is part of every recipe. */
 export const ODDS = [3,5,7,9,11,13,15,17,19,21,23,25,27,29,31,33,37,41,47,53];
@@ -45,10 +49,11 @@ export function compileExpr(expr){
  * @param {string[]} palette  from palette.paletteFor()
  * @returns {{ grid:Uint8Array[], colors:string[], w:number, h:number,
  *             symmetry:string, effectiveSymmetry:string, fold:number,
- *             tiers:string, recipeText:string }}
+ *             tiers:string, tierField:string, recipeText:string }}
  * effectiveSymmetry differs from symmetry when a non-square grid cannot
  * hold the whole group (newdesign.md D3); the UI must show it.
- * tiers is the canonical tier text when tiers are on, else ''.
+ * tiers is the canonical tier text when tiers are on, else ''; tierField
+ * is the tier field's id when it is on, else ''.
  */
 export function generateSprite(seed, gen, palette){
   const rnd = mulberry32(seed);
@@ -62,6 +67,8 @@ export function generateSprite(seed, gen, palette){
   const tiered = tierState(gen);
   const table = tiered.on ? cachedTieredTable(symmetry, w, h, tiered.tiers) : orbitTable(symmetry, w, h, fold);
   const sw = table.sw, sh = table.sh;
+  const tfState = tierFieldState(gen, tiered);
+  const tf = tfState.on ? makeTierField(tfState.id, seed, tiered.tiers) : null;
   const pick = arr => arr[(rnd()*arr.length)|0];
 
   let fid = formulaId, M = modulus, st = stride, mid = maskId;
@@ -124,12 +131,18 @@ export function generateSprite(seed, gen, palette){
   } else {
     const fn = (source==='custom' && customFn) ? customFn : null;
     for(let y=0;y<sh;y++) for(let x=0;x<sw;x++){
-      const u = (x-cx)*st + p.ox, v = (y-cy)*st + p.oy;
+      let fx = x, fy = y, fp = p;
+      if(tf){
+        if(tf.map) [fx, fy] = tf.map(x, y);
+        if(tf.params) fp = tf.params(x, y, p);
+      }
+      const u = (fx-cx)*st + fp.ox, v = (fy-cy)*st + fp.oy;
       let n;
-      try { n = fn ? fn(x,y,u,v,w,h,p) : field.f(u,v,p); }
+      try { n = fn ? fn(fx,fy,u,v,w,h,fp) : field.f(u,v,fp); }
       catch(e){ n = u*u+v*v; }
       if(!Number.isFinite(n)) n = 0;
       n = Math.round(n);
+      if(tf && tf.add) n += tf.add(x, y, M);
       const vm = ((n % M) + M) % M;
       const t = (vm/M + phase) % 1;
       if(t >= coverage){ seedGrid[y][x]=0; continue; }
@@ -174,7 +187,9 @@ export function generateSprite(seed, gen, palette){
       (fid==='conic' ? ` · [${p.a},${p.b},${p.c},${p.d},${p.e}]` : '') +
       ` · mask ${mid}${maskInvert?'⁻¹':''} · ${symLabel}`;
   const tierText = tiered.on ? printTiers(tiered.tiers) : '';
+  const tierField = tf ? tf.id : '';
 
-  return { grid, colors:paint, w, h, symmetry, effectiveSymmetry: table.effective.id, fold, tiers: tierText,
-           recipeText: tierText ? `${recipeText} · tiers ${tierText}` : recipeText };
+  return { grid, colors:paint, w, h, symmetry, effectiveSymmetry: table.effective.id, fold, tiers: tierText, tierField,
+           recipeText: (tierText ? `${recipeText} · tiers ${tierText}` : recipeText) +
+                       (tierField ? ` · tier field ${tierField}` : '') };
 }

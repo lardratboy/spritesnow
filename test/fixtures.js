@@ -146,5 +146,27 @@ export function tierFixtureList(){
           gen: { ...genFromLegacyCfg(cfg), symmetry:c.symmetry, fold:2, tiers:c.tiers },
         });
       }
+  for (const c of TIER_FIELD_CASES)
+    for (const tierField of TIER_FIELD_IDS)
+      for (const src of SOURCES.filter(s => s.cfg.source !== 'noise'))
+        for (const seed of SEEDS){
+          const cfg = { ...REFERENCE_CFG, ...src.cfg, symmetry:'none', sw:c.w, sh:c.h };
+          out.push({
+            name: `${c.symmetry}/${c.w}x${c.h}/${c.tiers}/tf:${tierField}/${src.name}/${hex8(seed)}`,
+            seed,
+            gen: { ...genFromLegacyCfg(cfg), symmetry:c.symmetry, fold:2, tiers:c.tiers, tierField },
+          });
+        }
   return out;
 }
+
+/* Tier fields (M5b): every field on a few splits, one tier included, since
+   each field defines what it does with a single tier. Noise has no field. */
+export const TIER_FIELD_IDS = ['wreath', 'digit-swap', 'prefix-hash', 'phasecell', 'cross', 'carry'];
+export const TIER_FIELD_CASES = [
+  { w:16, h:16, symmetry:'dihedral', tiers:'4 / 4' },
+  { w:16, h:16, symmetry:'mirror-y', tiers:'2 copy:mirror-x / 2 mirror-diag / 4 rot180' },
+  { w:16, h:16, symmetry:'rot90',    tiers:'16' },
+  { w:15, h:15, symmetry:'none',     tiers:'3 copy:rot90 / 5' },
+  { w:16, h:12, symmetry:'mirror-x', tiers:'4x4 / 4x3 quadrant' },
+];

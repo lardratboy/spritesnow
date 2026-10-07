@@ -3,11 +3,13 @@
    The symmetry picker lists all 10 SUBGROUPS (newdesign.md D4), and warns
    when a non-square sprite reduces the group (D3).
    The Tiers section (newdesign.md §5.2, M5a) is built by mountTiers below,
-   because its rows depend on the size and the split. */
+   because its rows depend on the size and the split. Its last row is the
+   tier field (M5b), shown while tiers are on or a field is set. */
 import { FIELDS } from '../core/fields.js';
 import { MASKS } from '../core/masks.js';
 import { SUBGROUPS, groupById, effectiveGroup, orbitTable } from '../core/groups2d.js';
 import { cachedTieredTable } from '../core/tiers.js';
+import { TIER_FIELDS, tierFieldState } from '../core/tierfields.js';
 import { parseTiers, printTiers, tierState, factorizations, withSplit } from '../recipe/tiers.js';
 
 const notNoise = g => g.source !== 'noise';
@@ -65,7 +67,7 @@ const SECTIONS = [
  */
 export function mountControls(root, { onChange, onAction, onLoad }){
   const inputs = [];   // { row, part, el, readout }
-  const tiersBox = mountTiers(text => onChange('gen', 'tiers', text));
+  const tiersBox = mountTiers(text => onChange('gen', 'tiers', text), id => onChange('gen', 'tierField', id));
 
   for (const section of SECTIONS){
     const part = section.part || 'gen';
@@ -179,12 +181,22 @@ export function mountControls(root, { onChange, onAction, onLoad }){
    tier's block group is the Symmetry setting. Under each tier: the group
    it is guaranteed (often more than was asked for), and below, the number
    of free cells. Tiers that stop fitting stay in the recipe, switched off,
-   and the note says why. */
+   and the note says why. A tier field that cannot act (no tiers, or noise)
+   stays set, switched off, and its note says why. */
 const KEEP = '__keep';
 const NO_GROUP = [['', '—'], ...SUBGROUPS.map(g => [g.id, g.name])];
 const dots = f => f.join('·');
 
-function mountTiers(setTiers){
+const FIELD_HINTS = {
+  'wreath': 'Each block shows the motif turned or mirrored, picked from its address.',
+  'digit-swap': 'Digits are read in reverse significance (one tier: across and down swap).',
+  'prefix-hash': 'Each block\'s address shifts the offsets and coefficients: a variant per block.',
+  'phasecell': 'Each block\'s bands shift by its own phase.',
+  'cross': 'Adds the dot and cross products of adjacent tiers\' digits.',
+  'carry': 'Adds the odometer\'s carries: each block split on its anti-diagonal.',
+};
+
+function mountTiers(setTiers, setField){
   const box = el('div', 'group');
   box.append(el('div', 'title', 'Tiers'));
   const across = el('select'), down = el('select');
@@ -194,7 +206,13 @@ function mountTiers(setTiers){
   const note = el('div', 'hint');
   const tiersEl = el('div');
   const summary = el('div', 'hint tier-sum');
-  box.append(acrossRow, downRow, help, tiersEl, summary, note);
+  const field = el('select');
+  field.id = 'c-gen-tierField';
+  fill(field, TIER_FIELDS.map(f => [f.id, f.name]));
+  field.addEventListener('change', () => setField(field.value));
+  const fieldRow = labelled('Field', field);
+  const fieldNote = el('div', 'hint');
+  box.append(acrossRow, downRow, help, tiersEl, summary, fieldRow, fieldNote, note);
 
   let gen = null, key = '';
   const prevTiers = () => parseTiers(gen.tiers).tiers;
@@ -229,6 +247,7 @@ function mountTiers(setTiers){
     help.classList.toggle('hidden', !state.on);
     tiersEl.innerHTML = '';
     summary.textContent = '';
+    buildField(state);
     note.className = 'hint';
     note.textContent = state.reason ? `Tiers off: ${state.reason}.`
                      : fold !== 2 ? 'Tiers need the corrected fold (v2).' : '';
@@ -260,6 +279,13 @@ function mountTiers(setTiers){
     summary.textContent = `${table.orbitCount} free cells (orbits), ${plain} without tiers. ` +
                           `Sprite: ${groupById(table.group).name}.`;
   }
+  function buildField(state){
+    const fs = tierFieldState(gen, state);
+    fieldRow.classList.toggle('hidden', !state.on && fs.id === 'none');
+    field.value = fs.id;
+    fieldNote.className = fs.reason ? 'hint warn' : 'hint';
+    fieldNote.textContent = fs.reason ? `Tier field off: ${fs.reason}.` : FIELD_HINTS[fs.id] || '';
+  }
   function edit(i, change){
     const tiers = current().map((t, j) => j === i ? { ...t, ...change } : t);
     setTiers(printTiers(tiers));
@@ -269,7 +295,7 @@ function mountTiers(setTiers){
     box,
     update(g){
       gen = g;
-      const k = JSON.stringify([g.w, g.h, g.symmetry, g.fold, g.tiers]);
+      const k = JSON.stringify([g.w, g.h, g.symmetry, g.fold, g.tiers, g.tierField, g.source === 'noise']);
       if (k === key) return;
       key = k;
       const focused = box.contains(document.activeElement) ? document.activeElement.id : null;
