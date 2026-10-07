@@ -4,8 +4,8 @@ A 2D procedural sprite generator. The core is a pure function, **recipe in,
 sprite out, same bytes every time**, and symmetry comes from an explicit
 group engine (the 10 subgroups of the square's symmetry group D4).
 
-Status: **starter scaffold.** The module files are stubs. The plan is
-[docs/newdesign.md](docs/newdesign.md). Milestone M0 is the first piece of work.
+Status: **v1 (M0–M2 done).** The plan and milestone status are in
+[docs/newdesign.md](docs/newdesign.md). Browser checks are listed in [test/smoke.md](test/smoke.md).
 
 ## Run it
 

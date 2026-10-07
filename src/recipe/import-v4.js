@@ -9,7 +9,7 @@
    Every imported recipe gets fold: 1, so it reproduces exactly what the
    user saw, defects included (newdesign.md D2). */
 
-const todo = name => { throw new Error(`not implemented: importV4.${name} (M2)`); };
+import { normalize, normalizeGen } from './schema.js';
 
 /** Map an old mode name to a SUBGROUPS id. */
 export const LEGACY_SYMMETRY = {
@@ -35,5 +35,43 @@ export function genFromLegacyCfg(cfg){
   };
 }
 
-/** @returns {object[]} recipes, oldest first; the playhead entry is marked */
-export function importSession(json){ return todo('importSession'); }
+/** Read a session saved by the old app ("↓ Session").
+ *  @param {string | object} json  the file's text, or the parsed object
+ *  @returns {{ recipes:object[], playhead:number, notes:string[] }}
+ *    one recipe per timeline entry, oldest first; `playhead` indexes the
+ *    entry the user was looking at when they saved */
+export function importSession(json){
+  const d = typeof json === 'string' ? JSON.parse(json) : json;
+  if (!d || d.format !== 'sprite-gen-timeline')
+    throw new Error('not a session file from the old sprite generator');
+  if (!Array.isArray(d.entries) || !d.entries.length) throw new Error('the session has no timeline entries');
+  const notes = new Set();
+  const recipes = d.entries.map(x => {
+    const st = x.state ? x.state                                       // v1 entries
+             : { cfg: x.cfg, cells: d.cellPool[x.cells], paletteSeed: x.paletteSeed };
+    return recipeFromState(st, notes);
+  });
+  const playhead = Math.max(0, Math.min(d.playhead ?? recipes.length - 1, recipes.length - 1));
+  return { recipes, playhead, notes: [...notes] };
+}
+
+/* One timeline state -> one recipe. Locked cells carry their own cfg and
+   palette seed, so they become per-cell overrides. */
+function recipeFromState(st, notes){
+  const cfg = st.cfg, cells = st.cells;
+  const scale = Number(cfg.scale);
+  if (Number.isFinite(scale) && scale !== Math.round(scale))
+    notes.add(`fractional scale ${scale} rounded to ${Math.max(1, Math.round(scale))}: v1 draws integer scales only`);
+  const overrides = {};
+  cells.list.forEach((cell, i) => {
+    if (cell.locked && cell.lockCfg)
+      overrides[i] = { gen: normalizeGen(genFromLegacyCfg(cell.lockCfg)), paletteSeed: cell.lockCfg._paletteSeed };
+  });
+  return normalize({
+    gen: genFromLegacyCfg(cfg),
+    sheet: { cols: cells.cols, rows: cells.rows, spacing: cfg.spacing, scale: Math.max(1, Math.round(scale)) },
+    paletteSeed: st.paletteSeed,
+    seeds: cells.list.map(c => c.seed),
+    overrides,
+  });
+}

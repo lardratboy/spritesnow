@@ -1,0 +1,84 @@
+:root{
+  --bg:#0d1117; --panel:#161b22; --raised:#1c222b; --sunk:#0b0f14; --line:#2a3038;
+  --ink:#e6edf3; --dim:#8b949e; --accent:#4f8cff; --warn:#f0b429; --bad:#ef4444;
+}
+@media (prefers-color-scheme: light){
+  :root:not([data-theme="dark"]){
+    --bg:#f6f8fa; --panel:#ffffff; --raised:#f3f5f8; --sunk:#e9edf2; --line:#d0d7de;
+    --ink:#1f2328; --dim:#59636e; --accent:#2f6fe0; --warn:#9a6700; --bad:#cf222e;
+  }
+}
+*{ box-sizing:border-box }
+html, body{ height:100% }
+body{
+  margin:0; display:flex; background:var(--bg); color:var(--ink); overflow:hidden;
+  font:13px/1.4 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+h1{ font-size:15px; margin:0 0 10px; letter-spacing:.02em }
+button, input, select, textarea{ font:inherit; color:inherit }
+
+/* ------------------------------------------------------------ side panels */
+#controls, #inspector{
+  background:var(--panel); padding:12px; overflow-y:auto; display:flex; flex-direction:column; gap:10px;
+}
+#controls{ width:310px; flex:0 0 310px; border-right:1px solid var(--line) }
+#inspector{ width:270px; flex:0 0 270px; border-left:1px solid var(--line) }
+
+.group{ background:var(--raised); border:1px solid var(--line); border-radius:8px; padding:9px 10px }
+.group > .title{
+  font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--dim); font-weight:700; margin-bottom:6px;
+}
+.row{ display:flex; align-items:center; gap:8px; margin:5px 0 }
+.row > label:first-child{ flex:0 0 74px; color:var(--dim) }
+.row > input[type=number], .row > select, .row > input[type=range]{ flex:1; min-width:0 }
+.row > .val{ flex:0 0 34px; text-align:right; font-variant-numeric:tabular-nums; color:var(--dim) }
+.row.check label{ display:flex; gap:6px; align-items:center; color:var(--ink); flex:1 }
+.row.stack{ flex-direction:column; align-items:stretch; gap:3px }
+.row.stack > label:first-child{ flex:none }
+textarea{ width:100%; resize:vertical; font-family:ui-monospace, monospace; font-size:12px }
+input[type=number], select, textarea{
+  background:var(--sunk); border:1px solid var(--line); border-radius:5px; padding:3px 6px;
+}
+.hidden{ display:none !important }
+.hint{ font-size:12px; color:var(--dim) }
+.hint.warn{ color:var(--warn) }
+
+button{
+  background:var(--sunk); border:1px solid var(--line); border-radius:6px; padding:5px 10px; cursor:pointer;
+}
+button:hover{ border-color:var(--accent) }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible{
+  outline:2px solid var(--accent); outline-offset:1px;
+}
+button.primary{ background:var(--accent); border-color:var(--accent); color:#fff }
+.buttons{ display:flex; flex-wrap:wrap; gap:6px }
+.buttons > button{ flex:1 1 auto }
+
+/* ------------------------------------------------------------------ stage */
+#main{ flex:1; min-width:0; position:relative; display:flex; flex-direction:column }
+#stage{ flex:1; min-height:0; position:relative; background:var(--sunk); cursor:crosshair; touch-action:none }
+#stage canvas{ position:absolute; inset:0; width:100%; height:100%; display:block }
+#toolbar{ position:absolute; top:10px; right:10px; display:flex; gap:4px }
+#toolbar button{ background:var(--panel); min-width:32px }
+#status{ padding:6px 12px; border-top:1px solid var(--line); background:var(--panel); color:var(--dim); min-height:30px }
+#status .warn{ color:var(--warn) }
+#status .bad{ color:var(--bad) }
+
+/* -------------------------------------------------------------- inspector */
+#inspector .preview{
+  display:flex; align-items:center; justify-content:center; background:var(--sunk);
+  border:1px solid var(--line); border-radius:8px; min-height:200px; padding:8px;
+}
+#inspector .preview canvas{ image-rendering:pixelated; max-width:100% }
+#inspector dl{ display:grid; grid-template-columns:auto 1fr; gap:4px 10px; margin:0 }
+#inspector dt{ color:var(--dim) }
+#inspector dd{ margin:0; overflow-wrap:anywhere }
+#inspector .recipe-text{ font-family:ui-monospace, monospace; font-size:12px }
+#inspector .reduced{ color:var(--warn) }
+
+/* ----------------------------------------------------------------- narrow */
+@media (max-width: 900px){
+  body{ flex-direction:column; overflow:auto }
+  #controls, #inspector{ width:auto; flex:none; border:0; border-bottom:1px solid var(--line); padding:12px 16px }
+  #main{ flex:none; height:70vh }
+}
