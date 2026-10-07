@@ -1,4 +1,4 @@
-# Browser smoke test (M2, M3a, M3b, M3c)
+# Browser smoke test (M2, M3a, M3b, M3c, M4a)
 
 What to check by hand after a change to the UI. About five minutes.
 
@@ -124,3 +124,19 @@ outside the timeline: scrubbing never removes a kept sprite.
     `sprite_session.json` that had kept sprites: they appear in the
     collection, looking as they did in the old app. A file that is not a
     session gives a red message in the status line and changes nothing.
+
+## Rendering (M4a)
+
+The screen shows the sheet at scale 1 and zooms it by Scale; sprites
+come from a cache, so only changed cells are generated.
+
+32. **Status line.** On first load it ends "48 generated, built in … ms".
+    Shift-click a sprite: "1 generated". Lock one: "0 generated". Change
+    Scale: "0 generated", and the sheet refits at the new size.
+33. **Big sheet.** Set Columns and Rows to 50, Width and Height to 32,
+    and Scale to 16. The sheet appears (it could not before M4a) and fits
+    the stage. Shift-click a sprite: "1 generated", built in a few ms.
+    Zoom in with scroll or **+**: pixels stay crisp and outlines line up.
+34. **Export limits.** On that sheet, "↓ Sheet PNG" gives a red message:
+    27200×27200 px is too big for a browser, and scale 9 fits. Back on
+    the default sheet (scale 4) it downloads a 576×432 PNG, as before.

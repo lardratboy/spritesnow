@@ -6,20 +6,22 @@
    The timeline (workshop/timeline.js) records the recipe after every
    change, so any entry replays exactly what was on screen. The collection
    (workshop/collection.js) sits outside the timeline, and a session file
-   (workshop/session.js) saves both. */
+   (workshop/session.js) saves both.
+   The screen shows the sheet at scale 1 and the view zooms by the scale;
+   sprites come from a cache, and only changed cells are redrawn
+   (workshop/sheet.js). Exports rasterise at the scale on demand. */
 import { normalize, cellSettings, resizeSheet, soloRecipe } from './recipe/schema.js';
 import { encode, decode } from './recipe/permalink.js';
-import { generateSprite } from './core/generate.js';
-import { paletteFor } from './core/palette.js';
 import { aut } from './core/groups2d.js';
-import { rasterizeSheet, rasterizeSolo, rasterizePacked } from './raster/rasterize.js';
-import { imageToCanvas, downloadPNG, downloadBlob } from './raster/png.js';
+import { rasterizeSolo, rasterizePacked, packedLayout, sheetSize } from './raster/rasterize.js';
+import { imageToCanvas, updateCanvas, canvasFits, downloadPNG, downloadBlob } from './raster/png.js';
 import { createTimeline, commit, goTo, deleteEntry, dropEntries, prunePlan, markKeyframe,
          setRecording } from './workshop/timeline.js';
 import { averageHash } from './workshop/frame-hash.js';
 import { isLocked, toggleLock, rerollCell, reseedUnlocked, lockedDifferences } from './workshop/cells.js';
 import { keep, rename, remove, move, restore, packGrid } from './workshop/collection.js';
 import { saveSession, readSession } from './workshop/session.js';
+import { createSpriteCache, cachedSprite, buildSheet, sheetLayout, sheetAtScale } from './workshop/sheet.js';
 import { mountControls } from './ui/controls.js';
 import { mountSheetView } from './ui/sheet-view.js';
 import { mountInspector } from './ui/inspector.js';
@@ -34,7 +36,6 @@ const freshRecipe = () => {
 };
 
 let recipe;
-let sprites = [];
 let selected = -1;
 let note = null;              // { text, cls } shown in the status line until the next action
 const tl = createTimeline();
@@ -42,40 +43,31 @@ let items = [];               // the collection
 
 /* ---------------------------------------------------------------- render */
 const sheetCanvas = document.createElement('canvas');
-let sheetImage = null;
-
-/** One recipe's sprites and sheet image. Pure apart from the clock. */
-function buildSheet(r){
-  const n = r.seeds.length, list = new Array(n);
-  for (let i = 0; i < n; i++){
-    const c = cellSettings(r, i);
-    list[i] = generateSprite(c.seed, c.gen, paletteFor(c.paletteSeed, c.gen.bpc));
-  }
-  const { cols, rows, spacing, scale } = r.sheet, { w, h } = r.gen;
-  const image = rasterizeSheet(list.map((sprite, i) => ({ sprite, col: i % cols, row: (i / cols) | 0 })),
-                               { cols, rows, cellW: w, cellH: h, spacing }, { scale });
-  return { sprites: list, image };
-}
+const cache = createSpriteCache();
+let sheet = null;             // the live build: sprites and the sheet image at scale 1
+let built = { ms: 0, generated: 0 };
 
 function render(){
   const t0 = performance.now();
-  ({ sprites, image: sheetImage } = buildSheet(recipe));
-  imageToCanvas(sheetImage, sheetCanvas);
+  sheet = buildSheet(recipe, cache, sheet);
+  if (sheet.dirty) updateCanvas(sheet.image, sheetCanvas, sheet.dirty);
+  else imageToCanvas(sheet.image, sheetCanvas);
   const { cols, rows, spacing, scale } = recipe.sheet, { w, h } = recipe.gen;
-  view.setImage(sheetCanvas, { cols, rows, outerW: (w + spacing) * scale, outerH: (h + spacing) * scale,
-                               offX: 0, offY: 0, spriteW: w * scale, spriteH: h * scale });
-  if (selected >= sprites.length) selected = -1;
+  view.setImage(sheetCanvas, { cols, rows, outerW: w + spacing, outerH: h + spacing,
+                               offX: 0, offY: 0, spriteW: w, spriteH: h }, scale);
+  if (selected >= sheet.sprites.length) selected = -1;
   view.setLocked(Object.keys(recipe.overrides).map(Number));
   view.setSelection(selected);
   controls.update(recipe);
   showInspector();
-  setStatus(performance.now() - t0);
+  built = { ms: performance.now() - t0, generated: sheet.generated };
+  setStatus();
   writeHash();
 }
 
 function showInspector(){
   if (selected < 0) return inspector.show(null);
-  const sprite = sprites[selected], c = cellSettings(recipe, selected);
+  const sprite = sheet.sprites[selected], c = cellSettings(recipe, selected);
   inspector.show({
     index: selected, seed: c.seed, sprite, gen: c.gen, paletteSeed: c.paletteSeed,
     aut: aut(sprite.grid, sprite.w, sprite.h), image: rasterizeSolo(sprite, { scale: 1 }),
@@ -83,10 +75,13 @@ function showInspector(){
   });
 }
 
-function setStatus(ms){
-  const { cols, rows } = recipe.sheet, { w, h } = recipe.gen;
+/* The status line: the last build, then the latest note. "generated" counts
+   the sprites that were not in the cache, so a one-cell reroll says 1. */
+function setStatus(){
+  const { cols, rows } = recipe.sheet, { w, h } = recipe.gen, { ms, generated } = built;
   const status = $('status');
-  status.textContent = `${cols * rows} sprites · ${w}×${h} · scale ${recipe.sheet.scale} · built in ${ms.toFixed(0)} ms`;
+  status.textContent = `${cols * rows} sprites · ${w}×${h} · scale ${recipe.sheet.scale} · ` +
+    `${generated} generated, built in ${ms < 10 ? ms.toFixed(1) : ms.toFixed(0)} ms`;
   if (note){
     const span = document.createElement('span');
     span.className = note.cls || '';
@@ -110,7 +105,9 @@ function writeHash(){
 /* -------------------------------------------------------------- timeline */
 let playTimer = 0;
 const showTimeline = () => timelineView.refresh(tl, { playing: !!playTimer });
-const liveOpts = () => ({ hash: averageHash(sheetImage) });
+/* The pruner hashes the sheet at scale 1, so an entry's hash does not
+   depend on its scale (before M4a it hashed the sheet at its scale). */
+const liveOpts = () => ({ hash: averageHash(sheet.image) });
 
 /* Record the live recipe (it is already rendered, so the sheet canvas is
    its picture). With REC off this only marks the recipe as unrecorded. */
@@ -170,7 +167,7 @@ const timelineView = mountTimelineView($('timeline'), {
     const before = tl.entries[tl.playhead];
     const n = dropEntries(tl, prunePlan(tl, threshold));
     say(`removed ${n} near-duplicate entr${n === 1 ? 'y' : 'ies'} at similarity ${threshold}; ${tl.entries.length} left`);
-    setStatus(0);
+    setStatus();
     removed(before);
   },
 });
@@ -191,7 +188,7 @@ function change(part, key, value){
 async function copyText(text, what){
   try { await navigator.clipboard.writeText(text); say(`${what} copied`); }
   catch { prompt(`Copy the ${what.toLowerCase()}:`, text); say(`${what} shown for copying`); }
-  setStatus(0);
+  setStatus();
 }
 
 const ACTIONS = {
@@ -201,7 +198,13 @@ const ACTIONS = {
   },
   'new-palette'(){ apply({ ...recipe, paletteSeed: randomU32() }, 'palette', 'new palette'); },
   'copy-link'(){ lastHash = encode(recipe); history.replaceState(null, '', lastHash); copyText(location.href, 'Link'); },
-  'export-sheet'(){ downloadPNG(sheetImage, `spritesnow-sheet-${recipe.sheet.cols}x${recipe.sheet.rows}.png`); },
+  'export-sheet'(){
+    const { cols, rows, scale } = recipe.sheet, r = recipe, list = sheet.sprites, layout = sheetLayout(r);
+    let fits = scale;
+    while (fits > 1 && !sizeFits(sheetSize(layout, fits))) fits--;
+    exportPNG(sheetSize(layout, scale), () => sheetAtScale(r, list), `spritesnow-sheet-${cols}x${rows}.png`,
+              ` at scale ${scale}; scale ${fits} fits`);
+  },
   'save-session': () => saveFile(),
 };
 
@@ -211,15 +214,15 @@ const CELL = {
   lock(i){ apply(toggleLock(recipe, i), 'lock', `${isLocked(recipe, i) ? 'unlock' : 'lock'} #${i + 1}`); },
   reroll(i){ apply(rerollCell(recipe, i, randomU32()), 'reroll', `reroll #${i + 1}`); },
   keep(i){
-    const out = keep(items, recipe, i, { recipeText: sprites[i].recipeText, entry: tl.playhead + 1, now: Date.now() });
+    const out = keep(items, recipe, i, { recipeText: sheet.sprites[i].recipeText, entry: tl.playhead + 1, now: Date.now() });
     items = out.items;
     showCollection(out.item.id);
-    say(`kept #${i + 1} as "${out.item.name}"`); setStatus(0);
+    say(`kept #${i + 1} as "${out.item.name}"`); setStatus();
   },
 };
 function onSelected(action){
   if (selected >= 0) return CELL[action](selected);
-  say('select a sprite first'); setStatus(0);
+  say('select a sprite first'); setStatus();
 }
 function select(i, { shift = false, mod = false, alt = false } = {}){
   selected = i;
@@ -230,8 +233,18 @@ function select(i, { shift = false, mod = false, alt = false } = {}){
   if (i >= 0 && alt) CELL.keep(i);
 }
 
+/* Exports rasterise at the sheet's scale when asked. One too big for a
+   browser canvas is refused before its pixels are allocated. */
+const sizeFits = ({ width, height }) => canvasFits(width, height);
+/** @returns {Promise<boolean>} whether the PNG was saved */
+async function exportPNG(size, make, filename, hint = ''){
+  const px = `${size.width}×${size.height} px`, fail = text => { say(text, 'bad'); setStatus(); return false; };
+  if (!sizeFits(size)) return fail(`${filename} would be ${px}, too big for a browser to export${hint}`);
+  return await downloadPNG(make(), filename) || fail(`the browser could not encode ${filename} (${px})`);
+}
+
 /* ------------------------------------------------------------ collection */
-const itemSprite = it => generateSprite(it.seed, it.gen, paletteFor(it.paletteSeed, it.gen.bpc));
+const itemSprite = it => cachedSprite(cache, it.seed, it.gen, it.paletteSeed);
 const itemById = id => items.find(i => i.id === id);
 const safeName = n => n.replace(/[^a-z0-9._-]+/gi, '_').replace(/^_+|_+$/g, '') || 'sprite';
 const showCollection = reveal => collectionView.render(items, reveal);
@@ -250,12 +263,13 @@ const collectionView = mountCollectionView($('collection'), {
   onRemove(id){ items = remove(items, id); showCollection(); },
   onRename(id, name){ items = rename(items, id, name); showCollection(); },
   onMove(from, to){ items = move(items, from, to); showCollection(); },
-  onExportSheet(){
+  async onExportSheet(){
     if (!items.length) return;
-    const { cols, rows } = packGrid(items.length);
-    downloadPNG(rasterizePacked(items.map(itemSprite), { cols, spacing: recipe.sheet.spacing }, { scale: recipe.sheet.scale }),
-                `spritesnow-collection-${items.length}.png`);
-    say(`exported ${items.length} kept sprite${items.length === 1 ? '' : 's'} as a ${cols}×${rows} sheet`); setStatus(0);
+    const { cols, rows } = packGrid(items.length), list = items.map(itemSprite);
+    const pack = { cols, spacing: recipe.sheet.spacing }, scale = recipe.sheet.scale;
+    if (!await exportPNG(sheetSize(packedLayout(list, pack), scale), () => rasterizePacked(list, pack, { scale }),
+                         `spritesnow-collection-${items.length}.png`)) return;
+    say(`exported ${items.length} kept sprite${items.length === 1 ? '' : 's'} as a ${cols}×${rows} sheet`); setStatus();
   },
 });
 
@@ -267,7 +281,7 @@ function saveFile(){
   downloadBlob(new Blob([JSON.stringify(data)], { type: 'application/json' }), name);
   say(`saved ${name}: ${tl.entries.length} timeline entries, ${items.length} kept sprite${items.length === 1 ? '' : 's'}` +
       (data.live ? ', and the unrecorded sheet on screen' : ''));
-  setStatus(0);
+  setStatus();
 }
 
 /* Loading a session replaces the timeline and the collection, after asking
@@ -276,7 +290,7 @@ function saveFile(){
 async function loadFile(file){
   let got;
   try { got = readSession(await file.text()); }
-  catch (err){ say(`Could not load ${file.name}: ${err.message}`, 'bad'); return setStatus(0); }
+  catch (err){ say(`Could not load ${file.name}: ${err.message}`, 'bad'); return setStatus(); }
   if ((tl.entries.length > 1 || items.length) &&
       !confirm(`Replace the current session (${tl.entries.length} timeline entries, ${items.length} kept sprites) ` +
                `with ${file.name}?\n\nSave the current one first if you want to keep it.`)) return;
@@ -284,7 +298,7 @@ async function loadFile(file){
   // one sheet at a time: keep its hash and a thumbnail, not the image
   const scratch = document.createElement('canvas');
   for (const e of got.tl.entries){
-    const { image } = buildSheet(e.recipe);
+    const { image } = buildSheet(e.recipe, cache);
     e.hash = averageHash(image);
     timelineView.setThumb(e, timelineView.makeThumb(imageToCanvas(image, scratch)));
   }
@@ -312,7 +326,7 @@ const view = mountSheetView($('stage'), { onSelect: select });
 const inspector = mountInspector($('inspector'), {
   onCopyRecipe(){ copyText(JSON.stringify(soloRecipe(cellSettings(recipe, selected), recipe.sheet), null, 2), 'Recipe'); },
   onExport(){
-    const s = sprites[selected];
+    const s = sheet.sprites[selected];
     downloadPNG(rasterizeSolo(s, { scale: recipe.sheet.scale }), `spritesnow-${recipe.seeds[selected].toString(16)}.png`);
   },
   onLock: () => onSelected('lock'),

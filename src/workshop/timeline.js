@@ -21,7 +21,7 @@
    Entry: { kind, label, ts, recipe, keyframe, from, hash }
      kind  what made it: 'set:<part>.<key>' for a setting (these coalesce),
            or an action name ('regenerate', 'palette', 'start', …)
-     hash  an 8×8 average hash of the sheet ([lo, hi]), for the pruner */
+     hash  an 8×8 average hash of the sheet at scale 1 ([lo, hi]), for the pruner */
 import { hamming } from './frame-hash.js';
 import { SETTING_LABELS as LABELS } from '../recipe/schema.js';
 
