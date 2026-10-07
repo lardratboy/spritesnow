@@ -9,12 +9,16 @@
    fold() switch. With fold:1 the lookup IS the old fold, so output is byte
    identical to the reference; core.test.js holds every golden to that.
    With fold:2 the lookup is the group engine's: symmetric by construction,
-   and identical to the reference wherever the old fold was correct. */
+   and identical to the reference wherever the old fold was correct.
+   With gen.tiers on (fold:2 only), the lookup is the tiered one
+   (core/tiers.js): fewer, larger orbits over the same seed region, so the
+   RNG is consumed exactly as without tiers. */
 import { mulberry32 } from './rng.js';
 import { FIELDS, FIELD_BY_ID } from './fields.js';
 import { MASKS, MASK_BY_ID, blobMask } from './masks.js';
 import { lum, darken } from './palette.js';
 import { SUBGROUPS, orbitTable } from './groups2d.js';
+import { tierState, cachedTieredTable, printTiers } from './tiers.js';
 
 /** Moduli the per-cell "vary" option picks from. Order is part of every recipe. */
 export const ODDS = [3,5,7,9,11,13,15,17,19,21,23,25,27,29,31,33,37,41,47,53];
@@ -41,9 +45,10 @@ export function compileExpr(expr){
  * @param {string[]} palette  from palette.paletteFor()
  * @returns {{ grid:Uint8Array[], colors:string[], w:number, h:number,
  *             symmetry:string, effectiveSymmetry:string, fold:number,
- *             recipeText:string }}
+ *             tiers:string, recipeText:string }}
  * effectiveSymmetry differs from symmetry when a non-square grid cannot
  * hold the whole group (newdesign.md D3); the UI must show it.
+ * tiers is the canonical tier text when tiers are on, else ''.
  */
 export function generateSprite(seed, gen, palette){
   const rnd = mulberry32(seed);
@@ -54,7 +59,8 @@ export function generateSprite(seed, gen, palette){
   const sym = SUBGROUPS.find(s => s.id === symmetry);
   const symLabel = sym && sym.legacy ? sym.legacy : symmetry;   // the reference's recipe text
 
-  const table = orbitTable(symmetry, w, h, fold);
+  const tiered = tierState(gen);
+  const table = tiered.on ? cachedTieredTable(symmetry, w, h, tiered.tiers) : orbitTable(symmetry, w, h, fold);
   const sw = table.sw, sh = table.sh;
   const pick = arr => arr[(rnd()*arr.length)|0];
 
@@ -151,6 +157,14 @@ export function generateSprite(seed, gen, palette){
       if(grid[y][x]) continue;
       if((x>0&&grid[y][x-1])||(x<w-1&&grid[y][x+1])||(y>0&&grid[y-1][x])||(y<h-1&&grid[y+1][x])) out[y][x]=oi;
     }
+    // The outline reads neighbours, which a block or copy action does not
+    // keep, so with tiers an empty cell is outlined if any cell of its orbit
+    // is. Without tiers every element keeps neighbours and this changes nothing.
+    if(tiered.on){
+      const lit = new Uint8Array(sw*sh);
+      for(let y=0;y<h;y++) for(let x=0;x<w;x++) if(out[y][x]===oi) lit[table.rep[y*w+x]] = 1;
+      for(let y=0;y<h;y++) for(let x=0;x<w;x++) if(!grid[y][x] && lit[table.rep[y*w+x]]) out[y][x]=oi;
+    }
     grid = out;
   }
 
@@ -159,6 +173,8 @@ export function generateSprite(seed, gen, palette){
     : `${source==='custom'?'custom':fid} % ${M} · stride ${st} · off(${p.ox},${p.oy})` +
       (fid==='conic' ? ` · [${p.a},${p.b},${p.c},${p.d},${p.e}]` : '') +
       ` · mask ${mid}${maskInvert?'⁻¹':''} · ${symLabel}`;
+  const tierText = tiered.on ? printTiers(tiered.tiers) : '';
 
-  return { grid, colors:paint, w, h, symmetry, effectiveSymmetry: table.effective.id, fold, recipeText };
+  return { grid, colors:paint, w, h, symmetry, effectiveSymmetry: table.effective.id, fold, tiers: tierText,
+           recipeText: tierText ? `${recipeText} · tiers ${tierText}` : recipeText };
 }

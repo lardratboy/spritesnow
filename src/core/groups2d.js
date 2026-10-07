@@ -103,6 +103,10 @@ export function groupById(id){
   return g;
 }
 
+/** The id of the subgroup with exactly these elements, or undefined if they
+ *  are not one of the 10. @param {number[]} els  sorted element codes */
+export function groupIdOf(els){ return ID_BY_ELS.get(els.join(',')); }
+
 /** G ∩ Aut(grid): the elements of G that map a w x h grid onto itself.
  *  For square grids this is G. On a rectangle only the non-swapping
  *  elements fit, so the result is at most D2 (newdesign.md D3).

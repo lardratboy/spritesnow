@@ -108,3 +108,43 @@ export function legacyExact(groupId, w, h){
   }
   return true;
 }
+
+/* ------------------------------------------------------- tiered fixtures (M5a)
+   Tiered sprites have no oracle, so golden-tiers.json pins the port's own
+   output (`npm run golden:tiers`). Same rule as golden.json: regenerate only
+   for an intended change, and say so in the commit. */
+import { genFromLegacyCfg } from '../src/recipe/import-v4.js';
+
+export const TIER_CASES = [
+  // newdesign.md §5.2's table
+  { w:16, h:16, symmetry:'dihedral', tiers:'4 / 4' },
+  { w:16, h:16, symmetry:'none',     tiers:'4 copy:dihedral / 4 copy:dihedral' },
+  { w:16, h:16, symmetry:'none',     tiers:'4 / 4 dihedral' },
+  { w:16, h:16, symmetry:'rot90',    tiers:'4 / 4 mirror-x' },
+  { w:16, h:16, symmetry:'mirror-x', tiers:'4 / 4 rot90' },
+  { w:16, h:16, symmetry:'none',     tiers:'4 copy:rot90 / 4' },
+  // three tiers, odd sizes, diagonals, rectangles, a swap that does not fit
+  { w:16, h:16, symmetry:'mirror-y', tiers:'2 copy:mirror-x / 2 mirror-diag / 4 rot180' },
+  { w:15, h:15, symmetry:'rot90',    tiers:'3 copy:rot90 / 5 dihedral' },
+  { w:9,  h:9,  symmetry:'diagonals', tiers:'3 copy:mirror-y / 3 mirror-anti' },
+  { w:32, h:32, symmetry:'quadrant', tiers:'4 / 8 rot90' },
+  { w:16, h:12, symmetry:'mirror-x', tiers:'4x4 / 4x3 quadrant' },
+  { w:16, h:12, symmetry:'rot90',    tiers:'4x3 copy:quadrant / 4 rot90' },
+];
+
+/** Every tiered fixture: case × source × seed, as a port gen (fold 2).
+ *  @returns {{name:string, seed:number, gen:object}[]} */
+export function tierFixtureList(){
+  const out = [];
+  for (const c of TIER_CASES)
+    for (const src of SOURCES)
+      for (const seed of SEEDS){
+        const cfg = { ...REFERENCE_CFG, ...src.cfg, symmetry:'none', sw:c.w, sh:c.h };
+        out.push({
+          name: `${c.symmetry}/${c.w}x${c.h}/${c.tiers}/${src.name}/${hex8(seed)}`,
+          seed,
+          gen: { ...genFromLegacyCfg(cfg), symmetry:c.symmetry, fold:2, tiers:c.tiers },
+        });
+      }
+  return out;
+}

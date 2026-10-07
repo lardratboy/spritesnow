@@ -1,10 +1,14 @@
 /* Sidebar controls: edit the recipe. Built from a table, so adding a
    setting means adding one row here (and its spec in recipe/schema.js).
    The symmetry picker lists all 10 SUBGROUPS (newdesign.md D4), and warns
-   when a non-square sprite reduces the group (D3). */
+   when a non-square sprite reduces the group (D3).
+   The Tiers section (newdesign.md §5.2, M5a) is built by mountTiers below,
+   because its rows depend on the size and the split. */
 import { FIELDS } from '../core/fields.js';
 import { MASKS } from '../core/masks.js';
-import { SUBGROUPS, groupById, effectiveGroup } from '../core/groups2d.js';
+import { SUBGROUPS, groupById, effectiveGroup, orbitTable } from '../core/groups2d.js';
+import { cachedTieredTable } from '../core/tiers.js';
+import { parseTiers, printTiers, tierState, factorizations, withSplit } from '../recipe/tiers.js';
 
 const notNoise = g => g.source !== 'noise';
 const SECTIONS = [
@@ -61,6 +65,7 @@ const SECTIONS = [
  */
 export function mountControls(root, { onChange, onAction, onLoad }){
   const inputs = [];   // { row, part, el, readout }
+  const tiersBox = mountTiers(text => onChange('gen', 'tiers', text));
 
   for (const section of SECTIONS){
     const part = section.part || 'gen';
@@ -115,6 +120,7 @@ export function mountControls(root, { onChange, onAction, onLoad }){
       box.append(bar);
     }
     root.append(box);
+    if (section.title === 'Sprite') root.append(tiersBox.box);
   }
 
   // actions
@@ -161,8 +167,142 @@ export function mountControls(root, { onChange, onAction, onLoad }){
       note.classList.toggle('hidden', !eff.reduced);
       if (eff.reduced)
         note.textContent = `A ${g.w}×${g.h} sprite is not square, so this becomes ${groupById(eff.id).name}.`;
+      tiersBox.update(g);
     },
   };
+}
+
+/* ------------------------------------------------------------------ tiers
+   Across and Down list only the splits of the current size (radices outer
+   to inner, so 4·4 is 4 blocks of 4 cells), and only lengths both sides
+   share. Each tier then gets a block group and a copy group. The outer
+   tier's block group is the Symmetry setting. Under each tier: the group
+   it is guaranteed (often more than was asked for), and below, the number
+   of free cells. Tiers that stop fitting stay in the recipe, switched off,
+   and the note says why. */
+const KEEP = '__keep';
+const NO_GROUP = [['', '—'], ...SUBGROUPS.map(g => [g.id, g.name])];
+const dots = f => f.join('·');
+
+function mountTiers(setTiers){
+  const box = el('div', 'group');
+  box.append(el('div', 'title', 'Tiers'));
+  const across = el('select'), down = el('select');
+  across.id = 'c-tiers-across'; down.id = 'c-tiers-down';
+  const acrossRow = labelled('Across', across), downRow = labelled('Down', down);
+  const help = el('div', 'hint', 'Outer to inner: 4·4 is 4 blocks of 4 cells.');
+  const note = el('div', 'hint');
+  const tiersEl = el('div');
+  const summary = el('div', 'hint tier-sum');
+  box.append(acrossRow, downRow, help, tiersEl, summary, note);
+
+  let gen = null, key = '';
+  const prevTiers = () => parseTiers(gen.tiers).tiers;
+  const current = () => { const s = tierState(gen); return s.on ? s.tiers : null; };
+
+  across.addEventListener('change', () => {
+    if (across.value === KEEP) return;
+    if (across.value === '') return setTiers('');
+    const a = across.value.split('·').map(Number);
+    const on = current(), downs = factorizations(gen.h).filter(f => f.length === a.length);
+    // A rectangular split keeps its Down when the length allows; otherwise
+    // Down follows Across as closely as the height allows (the same split,
+    // on a square sprite).
+    const rect = on && on.some(t => t.rx !== t.ry);
+    const d = rect && on.length === a.length ? on.map(t => t.ry) : closest(downs, a);
+    setTiers(printTiers(withSplit(prevTiers(), a, d)));
+  });
+  down.addEventListener('change', () => {
+    const on = current();
+    if (on) setTiers(printTiers(withSplit(on, on.map(t => t.rx), down.value.split('·').map(Number))));
+  });
+
+  function build(){
+    const { w, h, fold } = gen;
+    const state = tierState(gen);
+    const downLengths = new Set(factorizations(h).map(f => f.length));
+    fill(across, [['', 'Off'], ...factorizations(w).filter(f => downLengths.has(f.length)).map(f => [dots(f), dots(f)]),
+                  ...(gen.tiers && !state.on ? [[KEEP, `${gen.tiers} (off)`]] : [])]);
+    across.value = state.on ? dots(state.tiers.map(t => t.rx)) : gen.tiers ? KEEP : '';
+    across.disabled = fold !== 2;
+    downRow.classList.toggle('hidden', !state.on);
+    help.classList.toggle('hidden', !state.on);
+    tiersEl.innerHTML = '';
+    summary.textContent = '';
+    note.className = 'hint';
+    note.textContent = state.reason ? `Tiers off: ${state.reason}.`
+                     : fold !== 2 ? 'Tiers need the corrected fold (v2).' : '';
+    if (state.reason) note.classList.add('warn');
+    if (!state.on) return;
+
+    const n = state.tiers.length;
+    fill(down, factorizations(h).filter(f => f.length === n).map(f => [dots(f), dots(f)]));
+    down.value = dots(state.tiers.map(t => t.ry));
+    const table = cachedTieredTable(gen.symmetry, w, h, state.tiers);
+    table.tiers.forEach((t, i) => {
+      const inner = i === n - 1;
+      const what = inner ? `${t.rx}×${t.ry} cells` : `${t.rx}×${t.ry} blocks of ${t.sx}×${t.sy}`;
+      tiersEl.append(el('div', 'hint tier-head', `Tier ${i + 1} · ${what}`));
+      if (i === 0) tiersEl.append(labelled('Blocks', el('span', 'hint', 'the Symmetry setting')));
+      else tiersEl.append(labelled('Blocks', groupSelect(`c-tier-${i}-block`, state.tiers[i].block,
+                                                       id => edit(i, { block: id }))));
+      tiersEl.append(labelled('Copies', groupSelect(`c-tier-${i}-copy`, state.tiers[i].copy,
+                                                  id => edit(i, { copy: id }))));
+      const parts = [];
+      for (const [part, label, shape] of [['block', 'blocks', `${t.bw}×${t.bh} block`], ['copy', 'copies', `${t.rx}×${t.ry} grid`]]){
+        const p = t[part];
+        if (p.asked && p.fit !== p.asked) parts.push(`${groupById(p.asked).name} does not fit a ${shape}: ${groupById(p.fit).name}`);
+        parts.push(`${label} ${groupById(p.result).name}`);
+      }
+      tiersEl.append(el('div', 'hint', `→ ${parts.join(' · ')}`));
+    });
+    const plain = orbitTable(gen.symmetry, w, h, 2).orbitCount;
+    summary.textContent = `${table.orbitCount} free cells (orbits), ${plain} without tiers. ` +
+                          `Sprite: ${groupById(table.group).name}.`;
+  }
+  function edit(i, change){
+    const tiers = current().map((t, j) => j === i ? { ...t, ...change } : t);
+    setTiers(printTiers(tiers));
+  }
+
+  return {
+    box,
+    update(g){
+      gen = g;
+      const k = JSON.stringify([g.w, g.h, g.symmetry, g.fold, g.tiers]);
+      if (k === key) return;
+      key = k;
+      const focused = box.contains(document.activeElement) ? document.activeElement.id : null;
+      build();
+      if (focused && document.getElementById(focused)) document.getElementById(focused).focus();
+    },
+  };
+}
+
+/** The factorization in `list` nearest to `a`, radix by radix (log ratio). */
+function closest(list, a){
+  const dist = f => f.reduce((sum, r, i) => sum + Math.abs(Math.log(r / a[i])), 0);
+  return list.reduce((best, f) => dist(f) < dist(best) ? f : best);
+}
+
+function groupSelect(id, value, onPick){
+  const s = el('select');
+  s.id = id;
+  fill(s, NO_GROUP);
+  s.value = value || '';
+  s.addEventListener('change', () => onPick(s.value || null));
+  return s;
+}
+function fill(select, options){
+  select.innerHTML = '';
+  for (const [v, text] of options){ const o = el('option', null, text); o.value = String(v); select.append(o); }
+}
+function labelled(text, input){
+  const line = el('div', 'row');
+  const label = el('label', null, text);
+  if (input.id) label.htmlFor = input.id;
+  line.append(label, input);
+  return line;
 }
 
 function el(tag, cls, text){

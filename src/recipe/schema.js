@@ -12,6 +12,7 @@ import { SUBGROUPS, groupById } from '../core/groups2d.js';
 import { FIELDS } from '../core/fields.js';
 import { MASKS } from '../core/masks.js';
 import { hash32 } from '../core/rng.js';
+import { canonicalTiers } from './tiers.js';
 
 export const FORMAT = 'spritesnow/1';
 
@@ -27,6 +28,7 @@ export const DEFAULT_RECIPE = Object.freeze({
     w: 16, h: 16,
     symmetry: 'mirror-x',   // a groups2d SUBGROUPS id (legacy 'horizontal')
     fold: 2,                // 1 = reproduce the old fold, defects included
+    tiers: '',              // recipe/tiers.js: '' (off), or e.g. '4 / 4 mirror-x' (fold 2 only)
     bpc: 3, ncol: 4, colorMode: 'bands', sortLum: true,
   }),
   sheet: Object.freeze({ cols: 8, rows: 6, spacing: 2, scale: 4 }),
@@ -41,6 +43,7 @@ export const SETTING_LABELS = {
   'gen.stride':'Stride', 'gen.phase':'Phase', 'gen.coverage':'Coverage', 'gen.vary':'Vary per cell',
   'gen.ca':'CA smooth', 'gen.mask':'Mask', 'gen.maskScale':'Mask size', 'gen.maskInvert':'Mask invert',
   'gen.outline':'Outline', 'gen.w':'Width', 'gen.h':'Height', 'gen.symmetry':'Symmetry', 'gen.fold':'Fold',
+  'gen.tiers':'Tiers',
   'gen.bpc':'Gamut', 'gen.ncol':'Colours', 'gen.colorMode':'Colour mode', 'gen.sortLum':'Sort by luminance',
   'sheet.cols':'Columns', 'sheet.rows':'Rows', 'sheet.spacing':'Spacing', 'sheet.scale':'Scale',
 };
@@ -58,7 +61,7 @@ export const GEN_SPEC = {
   vary: bool, ca: bool,
   mask: oneOf([...MASKS.map(m => m.id), 'mix']), maskScale: num(0.4, 1.45), maskInvert: bool, outline: bool,
   w: num(2, 64, true), h: num(2, 64, true),
-  symmetry: oneOf(SUBGROUPS.map(g => g.id)), fold: oneOf([1, 2]),
+  symmetry: oneOf(SUBGROUPS.map(g => g.id)), fold: oneOf([1, 2]), tiers: str,
   bpc: oneOf([1, 2, 3, 4, 8]), ncol: num(1, 16, true), colorMode: oneOf(['bands', 'cycle', 'solid']), sortLum: bool,
 };
 export const SHEET_SPEC = {
@@ -88,10 +91,13 @@ const coerceAll = (spec, input, defaults) => {
 const u32 = (v, fallback) => Number.isFinite(Number(v)) && v !== null && v !== '' ? Number(v) >>> 0 : fallback;
 
 /** A generator settings object with every key valid. fold:1 is only kept for
- *  groups the old app had (newdesign.md D2). */
+ *  groups the old app had (newdesign.md D2). Tiers are written in their
+ *  canonical form; tiers that do not fit (or cannot be read) are kept, and
+ *  are only off (tierState says why). */
 export function normalizeGen(gen){
   const g = coerceAll(GEN_SPEC, gen, DEFAULT_RECIPE.gen);
   if (g.fold === 1 && !groupById(g.symmetry).legacy) g.fold = 2;
+  g.tiers = canonicalTiers(g.tiers);
   return g;
 }
 

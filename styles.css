@@ -44,6 +44,8 @@ input[type=number], select, textarea{
 .hidden{ display:none !important }
 .hint{ font-size:12px; color:var(--dim) }
 .hint.warn{ color:var(--warn) }
+.tier-head{ margin-top:8px; color:var(--ink) }
+.tier-sum{ margin-top:8px }
 
 button{
   background:var(--sunk); border:1px solid var(--line); border-radius:6px; padding:5px 10px; cursor:pointer;

@@ -1,4 +1,4 @@
-# Browser smoke test (M2, M3a, M3b, M3c, M4a, M4b)
+# Browser smoke test (M2, M3a, M3b, M3c, M4a, M4b, M5a)
 
 What to check by hand after a change to the UI. About five minutes.
 
@@ -157,3 +157,49 @@ is the fallback. `npm run test:browser` checks most of this headlessly.
 38. **Big sheet.** Repeat step 33 in the WebGL2 tab. Panning and zooming
     stay smooth, the status line does not change while you do (nothing is
     rebuilt), and a Shift-click still says "1 generated".
+
+## Tiered sprites (M5a)
+
+A tiered sprite is a sprite made of sprites (newdesign.md §5.2). The
+Tiers section sits under Sprite in the left panel. Each link below opens
+one row of §5.2's table on a fresh 16×16 sheet; the Tiers section should
+show the free-cell count in the last column. `tiers.test.js` checks that
+these links decode to these recipes and counts.
+
+| Symmetry | Tiers | Link | Free cells |
+|---|---|---|---|
+| D4 | off | <http://localhost:8000/#r=eyJmIjoic3ByaXRlc25vdy8xIiwiZyI6eyJzeW1tZXRyeSI6ImRpaGVkcmFsIn0sInAiOjF9> | 36 |
+| D4 | `4 / 4` | <http://localhost:8000/#r=eyJmIjoic3ByaXRlc25vdy8xIiwiZyI6eyJzeW1tZXRyeSI6ImRpaGVkcmFsIiwidGllcnMiOiI0IC8gNCJ9LCJwIjoxfQ> | 36 |
+| none | `4 copy:dihedral / 4 copy:dihedral` | <http://localhost:8000/#r=eyJmIjoic3ByaXRlc25vdy8xIiwiZyI6eyJzeW1tZXRyeSI6Im5vbmUiLCJ0aWVycyI6IjQgY29weTpkaWhlZHJhbCAvIDQgY29weTpkaWhlZHJhbCJ9LCJwIjoxfQ> | 9 |
+| none | `4 / 4 dihedral` | <http://localhost:8000/#r=eyJmIjoic3ByaXRlc25vdy8xIiwiZyI6eyJzeW1tZXRyeSI6Im5vbmUiLCJ0aWVycyI6IjQgLyA0IGRpaGVkcmFsIn0sInAiOjF9> | 48 |
+| C4 | `4 / 4 mirror-x` | <http://localhost:8000/#r=eyJmIjoic3ByaXRlc25vdy8xIiwiZyI6eyJzeW1tZXRyeSI6InJvdDkwIiwidGllcnMiOiI0IC8gNCBtaXJyb3IteCJ9LCJwIjoxfQ> | 16 |
+| mirror-x | `4 / 4 rot90` | <http://localhost:8000/#r=eyJmIjoic3ByaXRlc25vdy8xIiwiZyI6eyJzeW1tZXRyeSI6Im1pcnJvci14IiwidGllcnMiOiI0IC8gNCByb3Q5MCJ9LCJwIjoxfQ> | 32 |
+| none | `4 copy:rot90 / 4` | <http://localhost:8000/#r=eyJmIjoic3ByaXRlc25vdy8xIiwiZyI6eyJzeW1tZXRyeSI6Im5vbmUiLCJ0aWVycyI6IjQgY29weTpyb3Q5MCAvIDQifSwicCI6MX0> | 64 |
+
+39. **Same sprite.** The first two links show the same sheet: tiers with no
+    groups change nothing.
+40. **Blocks.** On the `4 / 4 dihedral` link, each sprite is a 4×4 grid of
+    4×4 blocks, and every block is symmetric under all eight moves. Under
+    Tier 2 the panel says "→ blocks D4 · all eight".
+41. **More than asked for.** On the `4 / 4 mirror-x` link (C4 sprite), Tier
+    2 says "→ blocks D2 · both axis mirrors": turning a left/right mirror by
+    90° makes a top/bottom mirror too. Look closely: every block has both mirrors.
+42. **Copies are not symmetry.** On the `4 copy:rot90 / 4` link the blocks
+    repeat in a four-fold pattern, but each copy is the same way up, so the
+    whole sprite is not symmetric ("Sprite: C1 · none").
+43. **Picker.** Across lists only the splits of the width (16: 16, 2·8, 4·4,
+    8·2, 2·2·4, …). Pick 2·2·4: three tiers appear, Down follows to 2·2·4,
+    and the groups already chosen stay on their tiers.
+44. **Off, not lost.** Open the `4 / 4 mirror-x` link again and set Height
+    to 12. Across reads "4 / 4 mirror-x (off)" and an amber
+    note says "Tiers off: 4·4 = 16, sprite is 16×12." The sheet is the
+    plain sheet. Set Height back to 16: the tiers come back on as they were.
+45. **Rectangle.** Still at 16×12, pick Across 4·4: Down becomes 3·4, the
+    split of 12 closest to 4·4, and the mirror stays on Tier 2. Tier 1 says
+    C4 · pinwheel does not fit a 16×12 block (C2 · rotate 180°), as in step 5.
+46. **Old fold.** Set Fold to "Old app, exact (v1)": Across is disabled and
+    the amber note says "Tiers off: the old fold (v1) has no tiers." Set it
+    back to v2 and the tiers come back.
+47. **Link and timeline.** "Copy link" with tiers set, paste in a new tab:
+    the same sheet and the same Tiers panel. In the timeline, the tier
+    change is labelled "Tiers off → 4 / 4 mirror-x" (or similar).

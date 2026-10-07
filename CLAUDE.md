@@ -15,6 +15,9 @@ first. Background is in `docs/spritesnow.md` and `docs/from3Dto2D.md`.
 - `npm run golden`: regenerates `test/golden.json` from the **reference**
   app. Only run it when a change to sprite output is *intended*, and say so
   in the commit message.
+- `npm run golden:tiers`: regenerates `test/golden-tiers.json` from the
+  **port** (tiered sprites have no oracle). Same rule: only for an intended
+  change to tiered output, said in the commit message.
 - `npm run measure`: the measurement scripts behind `docs/from3Dto2D.md`.
 
 No bundler, no `node_modules`.
