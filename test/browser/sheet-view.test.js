@@ -126,6 +126,7 @@ test('pan and zoom rebuild and upload nothing; a reroll uploads one cell', { ski
   assert.ok(moved.draws >= before.draws + 4, `redrawn (${moved.draws - before.draws} draws)`);
 
   // Shift-click the first cell: one sprite generated, one cell uploaded
+  await session.evaluate(`(document.getElementById('url').click(), true)`);   // the address bar follows the recipe
   await session.evaluate(`(spritesnow.view.fit(), true)`);
   await frames();
   const cell = await session.evaluate(`(() => { const b = document.getElementById('stage').getBoundingClientRect(), v = spritesnow.view.getView();

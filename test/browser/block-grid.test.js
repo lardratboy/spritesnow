@@ -157,6 +157,7 @@ for (const name of Object.keys(RECIPES)){
 test('Blocks and G toggle the grid with no rebuild, timeline entry or new permalink', { skip }, async () => {
   const hash = encode(RECIPES.twoTiers);
   assert.equal(await load(hash, true), 'WebGL2');
+  await session.evaluate(`(document.getElementById('url').click(), true)`);   // the address bar follows the recipe
   await session.waitFor(`location.hash.length > 3`, { label: 'the permalink' });
   const before = await session.evaluate(`({ ...spritesnow.stats(), hash: location.hash,
     frames: document.querySelectorAll('#timeline .frame').length })`);

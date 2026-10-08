@@ -191,13 +191,24 @@ const playbar = (() => {
 })();
 
 /* The hash is written after a short pause, so dragging a slider does not
-   flood the browser history API. replaceState never fires hashchange. */
-let hashTimer = 0, lastHash = '';
+   flood the browser history API. replaceState never fires hashchange.
+   Keeping the address bar in step with the recipe is a view setting, off
+   by default: browsers list every URL replaceState writes in their history
+   and address-bar suggestions. Off, only Copy link writes the hash, and it
+   is cleared once the sheet no longer matches it. lastHash is the recipe
+   the address bar shows, in canonical form. */
+let hashTimer = 0, lastHash = '', urlSync = false;
+try { urlSync = localStorage.getItem('spritesnow.url') === 'on'; } catch {}
+function setHash(hash){
+  lastHash = hash;
+  history.replaceState(null, '', hash || location.pathname + location.search);
+}
 function writeHash(){
   clearTimeout(hashTimer);
   hashTimer = setTimeout(() => {
-    lastHash = encode(recipe);
-    history.replaceState(null, '', lastHash);
+    const hash = encode(recipe);
+    if (urlSync) setHash(hash);
+    else if (location.hash && hash !== lastHash) setHash('');
   }, 250);
 }
 
@@ -302,7 +313,7 @@ const ACTIONS = {
     apply(reseedUnlocked(recipe, randomU32), 'regenerate', n ? `new seeds, ${n} locked kept` : 'new seeds');
   },
   'new-palette'(){ apply({ ...recipe, paletteSeed: randomU32() }, 'palette', 'new palette'); },
-  'copy-link'(){ lastHash = encode(recipe); history.replaceState(null, '', lastHash); copyText(location.href, 'Link'); },
+  'copy-link'(){ setHash(encode(recipe)); copyText(location.href, 'Link'); },
   /* The sheet as shown: at an animated sheet's current time. */
   'export-sheet'(){
     const { cols, rows, scale } = recipe.sheet, build = sheet, layout = sheetLayout(recipe), t = player.t;
@@ -517,6 +528,19 @@ function setTheme(light){
 const toggleTheme = () => setTheme(document.documentElement.dataset.theme !== 'light');
 setTheme(document.documentElement.dataset.theme === 'light');
 $('theme').addEventListener('click', toggleTheme);
+/* Address bar follows the recipe: see writeHash. */
+function toggleUrl(){
+  urlSync = !urlSync;
+  try { localStorage.setItem('spritesnow.url', urlSync ? 'on' : 'off'); } catch {}
+  $('url').setAttribute('aria-pressed', String(urlSync));
+  clearTimeout(hashTimer);
+  if (urlSync) setHash(encode(recipe));
+  else if (location.hash) setHash('');
+  say(urlSync ? 'the address bar now follows the recipe' : 'the address bar is left alone; Copy link makes a permalink');
+  setStatus();
+}
+$('url').setAttribute('aria-pressed', String(urlSync));
+$('url').addEventListener('click', toggleUrl);
 $('zoom-in').addEventListener('click', () => view.zoom(1.25));
 $('zoom-out').addEventListener('click', () => view.zoom(0.8));
 
@@ -529,6 +553,7 @@ const KEYS = {
   f: () => view.fit(),
   g: toggleBlocks,
   t: toggleTheme,
+  u: toggleUrl,
   '+': () => view.zoom(1.25), '=': () => view.zoom(1.25), '-': () => view.zoom(0.8),
   ArrowLeft: () => jump(tl.playhead - 1), ArrowRight: () => jump(tl.playhead + 1),
   Home: () => jump(0), End: () => jump(tl.entries.length - 1),
@@ -552,7 +577,7 @@ window.addEventListener('keydown', e => {
 function loadFromHash(){
   try {
     const r = decode(location.hash);
-    if (r) { recipe = r; return true; }
+    if (r) { recipe = r; lastHash = encode(r); return true; }
   } catch (err){ say(`The link's recipe could not be read (${err.message}); started a new sheet`, 'bad'); }
   return false;
 }
