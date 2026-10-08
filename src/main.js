@@ -504,6 +504,19 @@ function toggleBlocks(){
   if (view.blockGrid && !view.blockEdgeCount()){ say('block grid on, but no sprite on the sheet has tiers on'); setStatus(); }
 }
 $('blocks').addEventListener('click', toggleBlocks);
+/* Dark or light: a view setting kept in localStorage, not in the recipe.
+   index.html applies the saved one before the first paint. */
+function setTheme(light){
+  const root = document.documentElement;
+  if (light) root.dataset.theme = 'light'; else delete root.dataset.theme;
+  try { localStorage.setItem('spritesnow.theme', light ? 'light' : 'dark'); } catch {}
+  $('theme').textContent = light ? '☾' : '☀';
+  $('theme').title = light ? 'Dark theme (T)' : 'Light theme (T)';
+  view.redraw();            // the outlines and block grid take their colours from CSS
+}
+const toggleTheme = () => setTheme(document.documentElement.dataset.theme !== 'light');
+setTheme(document.documentElement.dataset.theme === 'light');
+$('theme').addEventListener('click', toggleTheme);
 $('zoom-in').addEventListener('click', () => view.zoom(1.25));
 $('zoom-out').addEventListener('click', () => view.zoom(0.8));
 
@@ -515,6 +528,7 @@ const KEYS = {
   Escape: () => select(-1),
   f: () => view.fit(),
   g: toggleBlocks,
+  t: toggleTheme,
   '+': () => view.zoom(1.25), '=': () => view.zoom(1.25), '-': () => view.zoom(0.8),
   ArrowLeft: () => jump(tl.playhead - 1), ArrowRight: () => jump(tl.playhead + 1),
   Home: () => jump(0), End: () => jump(tl.entries.length - 1),

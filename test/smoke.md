@@ -420,3 +420,12 @@ With "reduce motion" set in the system settings, the sheet starts paused.
     all three (the drive does nothing at frame 0), but the later frames
     differ. Click ✂ and slide Similarity to 2: neither change is counted
     for removal, because the hash covers every frame.
+
+## Theme
+
+82. **Dark by default.** Open http://localhost:8000/ in a fresh browser
+    profile, even with the OS set to light mode: the app is dark, and the
+    toolbar's last button reads ☀. Click it (or press T): the app turns
+    light, the button reads ☾, and the selection outline and block grid
+    redraw in the light colours. The URL does not change. Reload: still
+    light. Press T: dark again, and it stays dark after a reload.

@@ -232,6 +232,8 @@ export function mountSheetView(root, { onSelect, gl = true }){
     blockEdgeCount(){ return built ? (edges ??= blockEdges(built.sprites, built.layout)).length : 0; },
     /** @param {number[]} indices  the locked cells */
     setLocked(indices){ locked = indices; draw(); },
+    /** Draw again with the current CSS colours (after a theme change). */
+    redraw: () => draw(),
     fit,
     zoom: f => zoomAt(f),
   };

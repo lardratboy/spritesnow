@@ -9,6 +9,10 @@
 </script>
 <link rel="icon" href="data:,">
 <link rel="stylesheet" href="styles.css">
+<script>
+  // the saved theme, before the first paint (main.js owns the toggle)
+  try { if (localStorage.getItem('spritesnow.theme') === 'light') document.documentElement.dataset.theme = 'light'; } catch {}
+</script>
 </head>
 <body>
   <aside id="controls" aria-label="Recipe controls">
@@ -21,6 +25,7 @@
       <button id="zoom-out" title="Zoom out (−)">−</button>
       <button id="fit" title="Fit the sheet (F)">Fit</button>
       <button id="blocks" title="Show where tier blocks meet (G)" aria-pressed="false">Blocks</button>
+      <button id="theme" title="Light theme (T)">☀</button>
     </div>
     <div id="playbar" class="hidden" aria-label="Animation">
       <button id="play" type="button" aria-pressed="false">▶</button>

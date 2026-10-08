@@ -1,14 +1,17 @@
+/* Dark by default, whatever the OS prefers; the ☀/☾ button sets
+   data-theme="light" on <html> (main.js), and index.html restores it
+   before the first paint. */
 :root{
+  color-scheme:dark;
   --bg:#0d1117; --panel:#161b22; --raised:#1c222b; --sunk:#0b0f14; --line:#2a3038;
   --ink:#e6edf3; --dim:#8b949e; --accent:#4f8cff; --warn:#f0b429; --bad:#ef4444;
   --grid:#ff4fd8;
 }
-@media (prefers-color-scheme: light){
-  :root:not([data-theme="dark"]){
-    --bg:#f6f8fa; --panel:#ffffff; --raised:#f3f5f8; --sunk:#e9edf2; --line:#d0d7de;
-    --ink:#1f2328; --dim:#59636e; --accent:#2f6fe0; --warn:#9a6700; --bad:#cf222e;
-    --grid:#c0189a;
-  }
+:root[data-theme="light"]{
+  color-scheme:light;
+  --bg:#f6f8fa; --panel:#ffffff; --raised:#f3f5f8; --sunk:#e9edf2; --line:#d0d7de;
+  --ink:#1f2328; --dim:#59636e; --accent:#2f6fe0; --warn:#9a6700; --bad:#cf222e;
+  --grid:#c0189a;
 }
 *{ box-sizing:border-box }
 html, body{ height:100% }
